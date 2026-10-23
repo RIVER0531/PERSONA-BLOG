@@ -156,3 +156,31 @@ test('buildTimelineEvents and searchGardenContent respect privacy and aggregate 
   const adminSearch = searchGardenContent(mockDb, '京都', true);
   assert.equal(adminSearch.length, 2);
 });
+
+import { convertMarkdownOrTextToHtml, buildOpenApiSpec } from './agentApi';
+
+test('convertMarkdownOrTextToHtml converts Markdown headings, bold, quotes, lists, and paragraphs into semantic HTML', () => {
+  const md = `## 一、山中听雨
+
+今天在竹林里煮茶，读完了**《草木有趣》**。
+
+> 衡门之下，可以栖迟。
+
+- 岩茶一泡
+- 手写笔记两页`;
+
+  const html = convertMarkdownOrTextToHtml(md);
+  assert.equal(html.includes('<h2>一、山中听雨</h2>'), true);
+  assert.equal(html.includes('<strong>《草木有趣》</strong>'), true);
+  assert.equal(html.includes('<blockquote>衡门之下，可以栖迟。</blockquote>'), true);
+  assert.equal(html.includes('<ul><li>岩茶一泡</li><li>手写笔记两页</li></ul>'), true);
+});
+
+test('buildOpenApiSpec produces valid OpenAPI 3.1.0 schema with server URL and BearerAuth', () => {
+  const spec = buildOpenApiSpec('https://river05531.ai.studio/', '竹林');
+  assert.equal(spec.openapi, '3.1.0');
+  assert.equal(spec.servers[0].url, 'https://river05531.ai.studio');
+  assert.equal(Boolean(spec.paths['/api/agent/execute']), true);
+  assert.equal(Boolean(spec.paths['/api/articles']), true);
+});
+

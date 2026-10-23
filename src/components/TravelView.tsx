@@ -9,8 +9,14 @@ import {
   Calendar,
   Upload,
   Lock,
+  Edit3,
 } from 'lucide-react';
-import type { TravelFootprint, Article, Album } from '../types/garden';
+import type {
+  TravelFootprint,
+  Article,
+  Album,
+  SiteSectionTitles,
+} from '../types/garden';
 import { filterVisibleContent } from '../utils/gardenLogic';
 import { compressAndUploadImage } from '../utils/api';
 
@@ -19,7 +25,9 @@ interface TravelViewProps {
   articles: Article[];
   albums: Album[];
   isAdmin: boolean;
+  sectionTitles?: SiteSectionTitles;
   onCreateTravel: (travel: Partial<TravelFootprint>) => Promise<void>;
+  onUpdateTravel?: (id: string, travel: Partial<TravelFootprint>) => Promise<void>;
   onDeleteTravel: (id: string) => Promise<void>;
   onOpenArticle: (articleId: string) => void;
   onOpenGallery: () => void;
@@ -30,7 +38,9 @@ export const TravelView: React.FC<TravelViewProps> = ({
   articles,
   albums,
   isAdmin,
+  sectionTitles,
   onCreateTravel,
+  onUpdateTravel,
   onDeleteTravel,
   onOpenArticle,
   onOpenGallery,
@@ -40,20 +50,32 @@ export const TravelView: React.FC<TravelViewProps> = ({
     visibleTravels[0]?.id || ''
   );
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editingTravelId, setEditingTravelId] = useState<string | null>(null);
 
-  // New travel form state
+  const pageTitle = sectionTitles?.travelPageTitle ?? '远行足迹 · 山海漫游手卷';
+  const pageSubtitle =
+    sectionTitles?.travelPageSubtitle ??
+    '标记去过的山川、古镇与岛屿。将地理坐标与当时的游记、照片串联成一份长期生长的行旅地图。';
+  const mapCaption =
+    sectionTitles?.travelMapCaption ?? '点击坐标点切换目的地记录';
+
+  // Form state
   const [destination, setDestination] = useState('');
   const [region, setRegion] = useState('');
   const [country, setCountry] = useState('中国');
-  const [startDate, setStartDate] = useState('2026-10-01');
-  const [endDate, setEndDate] = useState('2026-10-07');
+  const [startDate, setStartDate] = useState(
+    new Date().toISOString().slice(0, 10)
+  );
+  const [endDate, setEndDate] = useState(
+    new Date().toISOString().slice(0, 10)
+  );
   const [summary, setSummary] = useState('');
   const [story, setStory] = useState('');
   const [coordX, setCoordX] = useState(58);
   const [coordY, setCoordY] = useState(48);
   const [relatedArticleId, setRelatedArticleId] = useState('');
   const [relatedAlbumId, setRelatedAlbumId] = useState('');
-  const [tagsInput, setTagsInput] = useState('慢行，山野');
+  const [tagsInput, setTagsInput] = useState('');
   const [status, setStatus] = useState<'public' | 'private'>('public');
   const [photos, setPhotos] = useState<string[]>([]);
   const [isUploading, setIsUploading] = useState(false);
@@ -61,14 +83,54 @@ export const TravelView: React.FC<TravelViewProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const activeTravel =
-    visibleTravels.find((t) => t.id === activeTravelId) || visibleTravels[0] || null;
+    visibleTravels.find((t) => t.id === activeTravelId) ||
+    visibleTravels[0] ||
+    null;
+
+  const openCreateModal = () => {
+    setEditingTravelId(null);
+    setDestination('');
+    setRegion('');
+    setCountry('中国');
+    setStartDate(new Date().toISOString().slice(0, 10));
+    setEndDate(new Date().toISOString().slice(0, 10));
+    setSummary('');
+    setStory('');
+    setCoordX(58);
+    setCoordY(48);
+    setRelatedArticleId('');
+    setRelatedAlbumId('');
+    setTagsInput('');
+    setStatus('public');
+    setPhotos([]);
+    setShowAddModal(true);
+  };
+
+  const openEditModal = (trv: TravelFootprint) => {
+    setEditingTravelId(trv.id);
+    setDestination(trv.destination);
+    setRegion(trv.region);
+    setCountry(trv.country);
+    setStartDate(trv.startDate);
+    setEndDate(trv.endDate);
+    setSummary(trv.summary);
+    setStory(trv.story);
+    setCoordX(trv.coordinates.x);
+    setCoordY(trv.coordinates.y);
+    setRelatedArticleId(trv.relatedArticleId || '');
+    setRelatedAlbumId(trv.relatedAlbumId || '');
+    setTagsInput(trv.tags.join('，'));
+    setStatus(trv.status === 'private' ? 'private' : 'public');
+    setPhotos(trv.photos);
+    setShowAddModal(true);
+  };
 
   const handlePhotoUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     setIsUploading(true);
     try {
       const urls: string[] = [];
-      for (const file of Array.from(files).slice(0, 4)) {
+      for (const file of Array.from(files).slice(0, 6)) {
         const u = await compressAndUploadImage(file);
         urls.push(u);
       }
@@ -78,12 +140,12 @@ export const TravelView: React.FC<TravelViewProps> = ({
     }
   };
 
-  const handleCreateSubmit = async (e: React.FormEvent) => {
+  const handleSaveSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!destination.trim()) return;
-    await onCreateTravel({
+    const payload: Partial<TravelFootprint> = {
       destination: destination.trim(),
-      region: region.trim() || '远方',
+      region: region.trim(),
       country: country.trim() || '中国',
       startDate,
       endDate,
@@ -101,12 +163,15 @@ export const TravelView: React.FC<TravelViewProps> = ({
         .map((t) => t.trim())
         .filter(Boolean),
       status,
-    });
-    setDestination('');
-    setSummary('');
-    setStory('');
-    setPhotos([]);
+    };
+
+    if (editingTravelId && onUpdateTravel) {
+      await onUpdateTravel(editingTravelId, payload);
+    } else {
+      await onCreateTravel(payload);
+    }
     setShowAddModal(false);
+    setEditingTravelId(null);
   };
 
   return (
@@ -114,21 +179,20 @@ export const TravelView: React.FC<TravelViewProps> = ({
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-8 border-b border-[var(--border-organic)]">
         <div>
-          <p className="text-xs uppercase tracking-widest text-[#687a56] mb-2">
-            Footprints & Cartography of Memories
-          </p>
           <h1 className="font-serif-editorial text-3xl sm:text-4xl font-semibold">
-            远行足迹 · 山海漫游手卷
+            {pageTitle}
           </h1>
-          <p className="text-sm text-[var(--text-muted)] mt-2 max-w-xl">
-            标记去过的山川、古镇与岛屿。将地理坐标与当时的游记、照片串联成一份长期生长的行旅地图。
-          </p>
+          {pageSubtitle && (
+            <p className="text-sm text-[var(--text-muted)] mt-2 max-w-xl">
+              {pageSubtitle}
+            </p>
+          )}
         </div>
 
         {isAdmin && (
           <button
             type="button"
-            onClick={() => setShowAddModal(true)}
+            onClick={openCreateModal}
             className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#687a56] text-[#faf6f1] text-xs font-medium hover:bg-[#586947] cursor-pointer"
           >
             <Plus className="w-4 h-4" />
@@ -158,7 +222,6 @@ export const TravelView: React.FC<TravelViewProps> = ({
               preserveAspectRatio="none"
               className="w-full h-full opacity-55"
             >
-              {/* Soft organic terrain contours */}
               <path
                 d="M-10,30 Q25,10 55,28 T110,20"
                 fill="none"
@@ -199,7 +262,6 @@ export const TravelView: React.FC<TravelViewProps> = ({
                 opacity="0.5"
               />
 
-              {/* Connected Dashed Route Line between footprints */}
               {visibleTravels.length > 1 && (
                 <polyline
                   fill="none"
@@ -252,8 +314,8 @@ export const TravelView: React.FC<TravelViewProps> = ({
           </div>
 
           <div className="pt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--text-muted)]">
-            <span>北纬 18° 至 48° · 从泰北山谷、大理苍山到北疆白桦林与京都鸭川</span>
-            <span>离线手绘地图模式（永不失效）</span>
+            <span>{mapCaption}</span>
+            <span>离线手绘地图模式</span>
           </div>
         </div>
 
@@ -272,7 +334,8 @@ export const TravelView: React.FC<TravelViewProps> = ({
                 <div className="p-6 space-y-3">
                   <div className="text-xs text-[var(--text-muted)] flex flex-wrap items-center gap-x-2">
                     <span className="font-medium text-[#687a56]">
-                      {activeTravel.country} · {activeTravel.region}
+                      {activeTravel.country}
+                      {activeTravel.region ? ` · ${activeTravel.region}` : ''}
                     </span>
                     <span>·</span>
                     <span>
@@ -292,13 +355,17 @@ export const TravelView: React.FC<TravelViewProps> = ({
                     {activeTravel.destination}
                   </h2>
 
-                  <p className="text-xs text-[var(--text-muted)] italic">
-                    {activeTravel.summary}
-                  </p>
+                  {activeTravel.summary && (
+                    <p className="text-xs text-[var(--text-muted)] italic">
+                      {activeTravel.summary}
+                    </p>
+                  )}
 
-                  <p className="text-sm leading-relaxed pt-1">
-                    {activeTravel.story}
-                  </p>
+                  {activeTravel.story && (
+                    <p className="text-sm leading-relaxed pt-1">
+                      {activeTravel.story}
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -307,7 +374,9 @@ export const TravelView: React.FC<TravelViewProps> = ({
                   {activeTravel.relatedArticleId && (
                     <button
                       type="button"
-                      onClick={() => onOpenArticle(activeTravel.relatedArticleId!)}
+                      onClick={() =>
+                        onOpenArticle(activeTravel.relatedArticleId!)
+                      }
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#8b9d77]/15 text-[#687a56] text-xs font-medium hover:bg-[#8b9d77]/25 cursor-pointer"
                     >
                       <BookOpen className="w-3.5 h-3.5" />
@@ -327,14 +396,26 @@ export const TravelView: React.FC<TravelViewProps> = ({
                 </div>
 
                 {isAdmin && (
-                  <button
-                    type="button"
-                    onClick={() => onDeleteTravel(activeTravel.id)}
-                    className="text-xs text-[var(--text-muted)] hover:text-[#b55346] flex items-center gap-1 cursor-pointer"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    <span>删除</span>
-                  </button>
+                  <div className="flex items-center gap-3">
+                    {onUpdateTravel && (
+                      <button
+                        type="button"
+                        onClick={() => openEditModal(activeTravel)}
+                        className="text-xs text-[#687a56] hover:underline flex items-center gap-1 cursor-pointer"
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                        <span>编辑</span>
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => onDeleteTravel(activeTravel.id)}
+                      className="text-xs text-[var(--text-muted)] hover:text-[#b55346] flex items-center gap-1 cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>删除</span>
+                    </button>
+                  </div>
                 )}
               </div>
             </>
@@ -368,7 +449,8 @@ export const TravelView: React.FC<TravelViewProps> = ({
                   <div className="text-xs text-[var(--text-muted)] flex items-center gap-2">
                     <span className="inline-flex items-center gap-1 text-[#687a56] font-medium">
                       <MapPin className="w-3.5 h-3.5" />
-                      {trv.country} · {trv.region}
+                      {trv.country}
+                      {trv.region ? ` · ${trv.region}` : ''}
                     </span>
                     <span>·</span>
                     <span className="inline-flex items-center gap-1">
@@ -380,11 +462,26 @@ export const TravelView: React.FC<TravelViewProps> = ({
                     {trv.destination}
                   </h3>
                 </div>
+                {isAdmin && onUpdateTravel && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openEditModal(trv);
+                    }}
+                    className="text-xs text-[#687a56] hover:underline flex items-center gap-1 cursor-pointer"
+                  >
+                    <Edit3 className="w-3 h-3" />
+                    <span>编辑</span>
+                  </button>
+                )}
               </div>
 
-              <p className="text-sm text-[var(--text-muted)] leading-relaxed">
-                {trv.summary}
-              </p>
+              {trv.summary && (
+                <p className="text-sm text-[var(--text-muted)] leading-relaxed">
+                  {trv.summary}
+                </p>
+              )}
 
               {trv.photos.length > 0 && (
                 <div className="grid grid-cols-2 gap-2.5">
@@ -420,46 +517,65 @@ export const TravelView: React.FC<TravelViewProps> = ({
         </div>
       </div>
 
-      {/* Add Travel Modal */}
+      {/* Add / Edit Travel Modal */}
       {showAddModal && (
         <div
           role="dialog"
           aria-modal="true"
-          aria-label="点亮新足迹"
+          aria-label={editingTravelId ? '编辑远行足迹' : '点亮新足迹'}
           className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4 overflow-y-auto"
         >
           <form
-            onSubmit={handleCreateSubmit}
+            onSubmit={handleSaveSubmit}
             className="w-full max-w-lg rounded-2xl bg-[var(--bg-elevated)] border border-[var(--border-organic)] p-6 space-y-4 my-8"
           >
-            <h3 className="font-serif-editorial text-xl font-semibold">记录一段新的远行足迹</h3>
+            <h3 className="font-serif-editorial text-xl font-semibold">
+              {editingTravelId ? '编辑远行足迹' : '记录一段新的远行足迹'}
+            </h3>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="sm:col-span-2">
-                <label className="block text-xs text-[var(--text-muted)] mb-1">目的地名称</label>
+                <label className="block text-xs text-[var(--text-muted)] mb-1">
+                  目的地名称
+                </label>
                 <input
                   type="text"
                   required
                   value={destination}
                   onChange={(e) => setDestination(e.target.value)}
-                  placeholder="例如：景德镇 · 丙丁柴窑与三宝村"
+                  placeholder="例如：景德镇 · 丙丁柴窑"
                   className="w-full text-xs px-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-organic)]"
                 />
               </div>
               <div>
-                <label className="block text-xs text-[var(--text-muted)] mb-1">区域 / 省份</label>
+                <label className="block text-xs text-[var(--text-muted)] mb-1">
+                  区域 / 省份
+                </label>
                 <input
                   type="text"
                   value={region}
                   onChange={(e) => setRegion(e.target.value)}
-                  placeholder="赣东北"
+                  placeholder="选填"
                   className="w-full text-xs px-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-organic)]"
                 />
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-3">
               <div>
-                <label className="block text-xs text-[var(--text-muted)] mb-1">出发日期</label>
+                <label className="block text-xs text-[var(--text-muted)] mb-1">
+                  国家 / 地区
+                </label>
+                <input
+                  type="text"
+                  value={country}
+                  onChange={(e) => setCountry(e.target.value)}
+                  className="w-full text-xs px-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-organic)]"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-[var(--text-muted)] mb-1">
+                  出发日期
+                </label>
                 <input
                   type="date"
                   value={startDate}
@@ -468,7 +584,9 @@ export const TravelView: React.FC<TravelViewProps> = ({
                 />
               </div>
               <div>
-                <label className="block text-xs text-[var(--text-muted)] mb-1">返程日期</label>
+                <label className="block text-xs text-[var(--text-muted)] mb-1">
+                  返程日期
+                </label>
                 <input
                   type="date"
                   value={endDate}
@@ -479,7 +597,9 @@ export const TravelView: React.FC<TravelViewProps> = ({
             </div>
 
             <div>
-              <label className="block text-xs text-[var(--text-muted)] mb-1">一句话旅途印象</label>
+              <label className="block text-xs text-[var(--text-muted)] mb-1">
+                一句话旅途印象
+              </label>
               <input
                 type="text"
                 value={summary}
@@ -490,7 +610,9 @@ export const TravelView: React.FC<TravelViewProps> = ({
             </div>
 
             <div>
-              <label className="block text-xs text-[var(--text-muted)] mb-1">行旅详细故事记录</label>
+              <label className="block text-xs text-[var(--text-muted)] mb-1">
+                行旅详细故事记录
+              </label>
               <textarea
                 rows={3}
                 value={story}
@@ -500,9 +622,24 @@ export const TravelView: React.FC<TravelViewProps> = ({
               />
             </div>
 
+            <div>
+              <label className="block text-xs text-[var(--text-muted)] mb-1">
+                标签（用逗号分隔）
+              </label>
+              <input
+                type="text"
+                value={tagsInput}
+                onChange={(e) => setTagsInput(e.target.value)}
+                placeholder="例如：慢行，山野"
+                className="w-full text-xs px-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-organic)]"
+              />
+            </div>
+
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs text-[var(--text-muted)] mb-1">关联游记文章</label>
+                <label className="block text-xs text-[var(--text-muted)] mb-1">
+                  关联游记文章
+                </label>
                 <select
                   value={relatedArticleId}
                   onChange={(e) => setRelatedArticleId(e.target.value)}
@@ -517,7 +654,9 @@ export const TravelView: React.FC<TravelViewProps> = ({
                 </select>
               </div>
               <div>
-                <label className="block text-xs text-[var(--text-muted)] mb-1">关联摄影相册</label>
+                <label className="block text-xs text-[var(--text-muted)] mb-1">
+                  关联摄影相册
+                </label>
                 <select
                   value={relatedAlbumId}
                   onChange={(e) => setRelatedAlbumId(e.target.value)}
@@ -535,7 +674,9 @@ export const TravelView: React.FC<TravelViewProps> = ({
 
             <div className="grid grid-cols-3 gap-3">
               <div>
-                <label className="block text-xs text-[var(--text-muted)] mb-1">地图横坐标 (10-90)</label>
+                <label className="block text-xs text-[var(--text-muted)] mb-1">
+                  地图横坐标 (10-90)
+                </label>
                 <input
                   type="number"
                   min={10}
@@ -546,7 +687,9 @@ export const TravelView: React.FC<TravelViewProps> = ({
                 />
               </div>
               <div>
-                <label className="block text-xs text-[var(--text-muted)] mb-1">地图纵坐标 (15-85)</label>
+                <label className="block text-xs text-[var(--text-muted)] mb-1">
+                  地图纵坐标 (15-85)
+                </label>
                 <input
                   type="number"
                   min={15}
@@ -557,10 +700,14 @@ export const TravelView: React.FC<TravelViewProps> = ({
                 />
               </div>
               <div>
-                <label className="block text-xs text-[var(--text-muted)] mb-1">可见状态</label>
+                <label className="block text-xs text-[var(--text-muted)] mb-1">
+                  可见状态
+                </label>
                 <select
                   value={status}
-                  onChange={(e) => setStatus(e.target.value as 'public' | 'private')}
+                  onChange={(e) =>
+                    setStatus(e.target.value as 'public' | 'private')
+                  }
                   className="w-full text-xs px-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-organic)]"
                 >
                   <option value="public">公开</option>
@@ -576,7 +723,9 @@ export const TravelView: React.FC<TravelViewProps> = ({
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-[var(--border-organic)] text-xs cursor-pointer"
               >
                 <Upload className="w-3.5 h-3.5 text-[#687a56]" />
-                <span>{isUploading ? '上传中…' : `上传旅途照片 (${photos.length})`}</span>
+                <span>
+                  {isUploading ? '上传中…' : `上传旅途照片 (${photos.length})`}
+                </span>
               </button>
               <input
                 ref={fileInputRef}
@@ -590,7 +739,10 @@ export const TravelView: React.FC<TravelViewProps> = ({
               <div className="flex gap-2">
                 <button
                   type="button"
-                  onClick={() => setShowAddModal(false)}
+                  onClick={() => {
+                    setShowAddModal(false);
+                    setEditingTravelId(null);
+                  }}
                   className="px-4 py-2 rounded-xl text-xs border border-[var(--border-organic)] cursor-pointer"
                 >
                   取消

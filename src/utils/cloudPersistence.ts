@@ -5,6 +5,7 @@ import {
   getDoc,
   getDocFromServer,
   setDoc,
+  onSnapshot,
 } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 import type { GardenDatabase } from '../types/garden';
@@ -79,6 +80,7 @@ export interface CloudPersistenceStatus {
 }
 
 let lastCloudSyncTime: string | null = null;
+let lastKnownCloudHash: string | null = null;
 let isCloudConnected = false;
 
 /**
@@ -105,6 +107,49 @@ export async function testFirestoreConnection(): Promise<boolean> {
 }
 
 /**
+ * Subscribes to real-time updates on the primary state document in Cloud Firestore
+ * so changes made on https://river05531.ai.studio/ immediately sync to the debug preview and vice versa.
+ */
+export function subscribeToCloudDatabaseChanges(
+  onRemoteUpdate: (remoteDb: GardenDatabase) => void
+): () => void {
+  const path = `garden_cloud_store/${PRIMARY_STATE_KEY}`;
+  return onSnapshot(
+    doc(firestoreDb, 'garden_cloud_store', PRIMARY_STATE_KEY),
+    (snap) => {
+      if (!snap.exists()) return;
+      const data = snap.data() as {
+        payloadJson?: string;
+        sha256?: string;
+        updatedAt?: string;
+      };
+      if (!data?.payloadJson) return;
+      if (data.sha256 && data.sha256 === lastKnownCloudHash) {
+        return;
+      }
+      try {
+        const parsed = JSON.parse(data.payloadJson) as GardenDatabase;
+        lastKnownCloudHash = data.sha256 || sha256Buffer(data.payloadJson);
+        lastCloudSyncTime = data.updatedAt || new Date().toISOString();
+        isCloudConnected = true;
+        onRemoteUpdate(parsed);
+      } catch (err) {
+        console.warn('Failed to parse real-time Cloud Firestore snapshot:', err);
+      }
+    },
+    (error) => {
+      if (
+        error instanceof Error &&
+        error.message.includes('Missing or insufficient permissions')
+      ) {
+        handleFirestoreError(error, OperationType.GET, path);
+      }
+      console.warn('Cloud Firestore snapshot listener warning:', error);
+    }
+  );
+}
+
+/**
  * Loads the primary GardenDatabase state from Cloud Firestore.
  */
 export async function loadDatabaseFromCloud(): Promise<GardenDatabase | null> {
@@ -121,6 +166,7 @@ export async function loadDatabaseFromCloud(): Promise<GardenDatabase | null> {
       updatedAt: string;
     };
     if (!data?.payloadJson) return null;
+    lastKnownCloudHash = data.sha256 || sha256Buffer(data.payloadJson);
     lastCloudSyncTime = data.updatedAt || new Date().toISOString();
     isCloudConnected = true;
     return JSON.parse(data.payloadJson) as GardenDatabase;
@@ -148,10 +194,12 @@ export async function syncDatabaseToCloud(dbState: GardenDatabase): Promise<bool
       console.warn('Database state approaching Firestore 1MB doc limit');
     }
     const now = new Date().toISOString();
+    const hash = sha256Buffer(payloadJson);
+    lastKnownCloudHash = hash;
     await setDoc(doc(firestoreDb, 'garden_cloud_store', PRIMARY_STATE_KEY), {
       storeType: 'state',
       payloadJson,
-      sha256: sha256Buffer(payloadJson),
+      sha256: hash,
       updatedAt: now,
     });
     lastCloudSyncTime = now;
@@ -314,3 +362,54 @@ export async function getCloudPersistenceDiagnostics(): Promise<CloudPersistence
     cloudMediaCount: index.length,
   };
 }
+
+const AUTH_VAULT_DOC_KEY = 'qichi_media_asset_auth_vault_v1';
+
+export interface CloudAuthVault {
+  passwordHash: string;
+  agentApiKey: string;
+  updatedAt: string;
+}
+
+export async function loadAuthVaultFromCloud(): Promise<CloudAuthVault | null> {
+  const path = `garden_cloud_store/${AUTH_VAULT_DOC_KEY}`;
+  try {
+    const snap = await getDoc(doc(firestoreDb, 'garden_cloud_store', AUTH_VAULT_DOC_KEY));
+    if (!snap.exists()) return null;
+    const data = snap.data() as { payloadJson?: string };
+    if (!data?.payloadJson) return null;
+    return JSON.parse(data.payloadJson) as CloudAuthVault;
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message.includes('Missing or insufficient permissions')
+    ) {
+      handleFirestoreError(error, OperationType.GET, path);
+    }
+    return null;
+  }
+}
+
+export async function syncAuthVaultToCloud(vault: CloudAuthVault): Promise<boolean> {
+  const path = `garden_cloud_store/${AUTH_VAULT_DOC_KEY}`;
+  try {
+    const payloadJson = JSON.stringify(vault);
+    const now = new Date().toISOString();
+    await setDoc(doc(firestoreDb, 'garden_cloud_store', AUTH_VAULT_DOC_KEY), {
+      storeType: 'media_asset',
+      payloadJson,
+      sha256: sha256Buffer(payloadJson),
+      updatedAt: now,
+    });
+    return true;
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message.includes('Missing or insufficient permissions')
+    ) {
+      handleFirestoreError(error, OperationType.WRITE, path);
+    }
+    return false;
+  }
+}
+

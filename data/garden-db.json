@@ -1,0 +1,116 @@
+{
+  "version": 1,
+  "lastUpdated": "2026-10-23T17:46:40.461Z",
+  "profile": {
+    "gardenName": "竹林",
+    "gardenSubtitle": "",
+    "footerText": "",
+    "ownerName": "林知夏",
+    "ownerTitle": "独立写作者 · 慢行旅人 · 器物与胶片爱好者",
+    "avatar": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=600&q=80",
+    "signature": "衡门之下，可以栖迟；泌之洋洋，可以乐饥。把易逝的日常，种成长期生长的花园。",
+    "bio": "常居江南，偶尔进山。喜欢在纸页与光影之间记录微小而确切的瞬间。这里不追求算法与流量，只是一座缓慢生长、随时可以回来翻阅的私人生活档案室。",
+    "heroTitle": "渔樵夜归客",
+    "heroIntro": "",
+    "heroImage": "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1400&q=80",
+    "heroQuote": "",
+    "seasonNote": "丙午年 · 霜降将至 · 桂花落尽，宜温酒夜读",
+    "currentLocation": "杭州 · 西溪南麓",
+    "currentReading": "《草木有趣：跟着二十四节气过日子》",
+    "currentListening": "坂本龙一 《async》 & 岸部真明指弹吉他",
+    "aboutContent": "\n      <h2>一、为什么要建造这座数字花园</h2>\n      <p>在社交媒体与短视频将时间切割成碎片的年代，我们的记忆似乎也随之变得轻飘。那些三年前写下的微博、五年前拍下的胶片、某次旅途中在火车上记下的只言片语，往往散落在不同平台的角落，甚至随着账号迁移或平台关停而悄然消失。</p>\n      <p>因此，我决定为自己搭建这座名为<strong>「栖迟园」</strong>的个人空间。它不是为了迎合读者或搜索引擎而存在的媒体，而是一本真正属于我自己的、会随岁月不断生长的生活总集。</p>\n      <blockquote>“衡门之下，可以栖迟。” —— 在简朴而安静的地方游息，不为外界的喧嚣所裹挟，认真对待自己度过的每一天。</blockquote>\n      <h2>二、这里记录些什么</h2>\n      <ul>\n        <li><strong>长文手记（Articles）</strong>：记录旅行游记、阅读书评、器物长测，以及阶段性的人生复盘。</li>\n        <li><strong>日常瞬间（Moments）</strong>：像夹在书页里的干花一样，随手保存一句话、一张窗台的照片或某个傍晚的云。</li>\n        <li><strong>光影相册（Gallery）</strong>：按主题与季节整理的摄影集，留存中画幅与定焦镜头下的温度。</li>\n        <li><strong>远行足迹（Travel）</strong>：标记走过的城市与山野，把地理坐标与当时的故事串联起来。</li>\n        <li><strong>兴趣收藏（Collections）</strong>：整理长期使用的数码器物、反复翻阅的书籍、深夜看过的电影与黑胶唱片。</li>\n      </ul>\n      <h2>三、生活原则与偏爱</h2>\n      <p>偏爱原木、亚麻、粗陶与纸张的质感；买少一点，但买能够陪伴五年以上的好物；每年至少有两次离开熟悉城市的慢行；保持手写日记与长文阅读的习惯。</p>\n    ",
+    "interests": [
+      "胶片与定焦摄影",
+      "手冲咖啡与岩茶",
+      "机械键盘与桌面器物",
+      "山野徒步与古建寻访",
+      "独立出版物与旧书店",
+      "黑胶唱片收藏"
+    ],
+    "socialLinks": [
+      {
+        "label": "个人邮箱",
+        "url": "mailto:zhixia@qichigarden.local",
+        "handle": "zhixia@qichigarden.local"
+      },
+      {
+        "label": "RSS 订阅",
+        "url": "/sitemap.xml",
+        "handle": "全站文章订阅源"
+      },
+      {
+        "label": "GitHub",
+        "url": "https://github.com",
+        "handle": "@linzhixia"
+      }
+    ],
+    "milestones": [
+      {
+        "year": "2026",
+        "title": "建成「栖迟园」独立数字生活空间",
+        "description": "将过去五年的日记、摄影与器物收藏完整迁入自建花园，实现数据完全自主与长期归档。"
+      },
+      {
+        "year": "2025",
+        "title": "完成京都至濑户内海秋日漫行",
+        "description": "携一台定焦相机独行二十日，整理成三万字《秋日手记》与两册胶片影集。"
+      },
+      {
+        "year": "2024",
+        "title": "旅居大理喜洲与沙溪古镇",
+        "description": "在苍山脚下租下一座带院子的老木屋，度过了一个只听雨声、读书与烘焙的夏天。"
+      },
+      {
+        "year": "2022",
+        "title": "开始践行极简器物与慢记录生活",
+        "description": "告别信息流焦虑，重拾长文写作，开始系统整理每年的读书、观影与远行档案。"
+      }
+    ],
+    "homeModules": {
+      "showFeaturedArticles": true,
+      "showMoments": true,
+      "showGallery": true,
+      "showTravel": true,
+      "showCollections": true,
+      "showAlmanac": true
+    }
+  },
+  "articles": [],
+  "moments": [],
+  "albums": [],
+  "travels": [],
+  "collections": [],
+  "customCategories": {
+    "articleCategories": [
+      "远行漫记",
+      "器物与生活",
+      "山居随笔",
+      "思考与记录",
+      "私密手札",
+      "生活杂记"
+    ],
+    "collectionCategories": [
+      {
+        "id": "gear",
+        "label": "数码与器物"
+      },
+      {
+        "id": "film",
+        "label": "光影电影"
+      },
+      {
+        "id": "book",
+        "label": "枕边书册"
+      },
+      {
+        "id": "music",
+        "label": "黑胶与音乐"
+      },
+      {
+        "id": "site",
+        "label": "网站与工具"
+      }
+    ]
+  },
+  "mediaLibrary": []
+}

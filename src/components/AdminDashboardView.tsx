@@ -27,6 +27,7 @@ import type {
   Article,
   VisibilityStatus,
   SiteProfile,
+  SiteSectionTitles,
 } from '../types/garden';
 import type { BackupInspectionResult } from '../utils/backupEngine';
 import {
@@ -35,10 +36,14 @@ import {
   restoreZipBackupFile,
   fetchStorageDiagnostics,
   updateAdminPassword,
+  fetchAgentApiKeyInfo,
+  regenerateAgentApiKey,
   type StorageDiagnosticsResponse,
   type RestoreZipResponse,
+  type AgentApiKeyInfo,
 } from '../utils/api';
 import { formatEditorialDate } from '../utils/gardenLogic';
+import { buildOpenApiSpec } from '../utils/agentApi';
 
 interface AdminDashboardViewProps {
   garden: GardenDatabase;
@@ -51,6 +56,10 @@ interface AdminDashboardViewProps {
   onDeleteArticle: (id: string) => Promise<void>;
   onDeleteMoment: (id: string) => Promise<void>;
   onUpdateProfile: (profile: Partial<SiteProfile>) => Promise<void>;
+  onUpdateCategories?: (payload: {
+    articleCategories?: string[];
+    collectionCategories?: Array<{ id: string; label: string }>;
+  }) => Promise<void>;
   onRestoreBackupSuccess: (restored: GardenDatabase) => void;
 }
 
@@ -65,6 +74,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
   onDeleteArticle,
   onDeleteMoment,
   onUpdateProfile,
+  onUpdateCategories,
   onRestoreBackupSuccess,
 }) => {
   const [passwordInput, setPasswordInput] = useState('');
@@ -72,13 +82,14 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   const [activeTab, setActiveTab] = useState<
-    'backup' | 'articles' | 'moments' | 'homeConfig'
-  >('backup');
+    'homeConfig' | 'aiAgent' | 'backup' | 'articles' | 'moments'
+  >('aiAgent');
   const [feedbackMsg, setFeedbackMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
-  // Diagnostics & Backup states
+  // Diagnostics, Backup & AI Agent states
   const [diagnostics, setDiagnostics] = useState<StorageDiagnosticsResponse | null>(null);
+  const [agentInfo, setAgentInfo] = useState<AgentApiKeyInfo | null>(null);
   const [isExportingZip, setIsExportingZip] = useState(false);
   const [selectedZipFile, setSelectedZipFile] = useState<File | null>(null);
   const [isInspecting, setIsInspecting] = useState(false);
@@ -92,13 +103,53 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
     RestoreZipResponse['sandboxVerification'] | null
   >(null);
 
-  // Home & Site config state
+  // Full Site & Homepage config state
   const [gardenName, setGardenName] = useState(garden.profile.gardenName);
+  const [gardenSubtitle, setGardenSubtitle] = useState(
+    garden.profile.gardenSubtitle ?? ''
+  );
+  const [footerText, setFooterText] = useState(
+    garden.profile.footerText !== undefined
+      ? garden.profile.footerText
+      : garden.profile.signature
+  );
   const [heroTitle, setHeroTitle] = useState(garden.profile.heroTitle);
   const [heroIntro, setHeroIntro] = useState(garden.profile.heroIntro);
   const [heroQuote, setHeroQuote] = useState(garden.profile.heroQuote);
   const [seasonNote, setSeasonNote] = useState(garden.profile.seasonNote);
   const [homeModules, setHomeModules] = useState(garden.profile.homeModules);
+  const [sectionTitles, setSectionTitles] = useState<SiteSectionTitles>(
+    garden.profile.sectionTitles || {}
+  );
+
+  // Custom categories state
+  const [articleCategories, setArticleCategories] = useState<string[]>(
+    garden.customCategories.articleCategories
+  );
+  const [newArtCat, setNewArtCat] = useState('');
+  const [collectionCategories, setCollectionCategories] = useState<
+    Array<{ id: string; label: string }>
+  >(garden.customCategories.collectionCategories);
+  const [newColCatId, setNewColCatId] = useState('');
+  const [newColCatLabel, setNewColCatLabel] = useState('');
+
+  useEffect(() => {
+    setGardenName(garden.profile.gardenName);
+    setGardenSubtitle(garden.profile.gardenSubtitle ?? '');
+    setFooterText(
+      garden.profile.footerText !== undefined
+        ? garden.profile.footerText
+        : garden.profile.signature
+    );
+    setHeroTitle(garden.profile.heroTitle);
+    setHeroIntro(garden.profile.heroIntro);
+    setHeroQuote(garden.profile.heroQuote);
+    setSeasonNote(garden.profile.seasonNote);
+    setHomeModules(garden.profile.homeModules);
+    setSectionTitles(garden.profile.sectionTitles || {});
+    setArticleCategories(garden.customCategories.articleCategories);
+    setCollectionCategories(garden.customCategories.collectionCategories);
+  }, [garden.profile, garden.customCategories]);
 
   // Password change state
   const [currPw, setCurrPw] = useState('');
@@ -120,8 +171,12 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
   const refreshDiagnostics = useCallback(async () => {
     if (!isAdmin) return;
     try {
-      const diag = await fetchStorageDiagnostics();
+      const [diag, aiInfo] = await Promise.all([
+        fetchStorageDiagnostics(),
+        fetchAgentApiKeyInfo(),
+      ]);
       setDiagnostics(diag);
+      setAgentInfo(aiInfo);
     } catch {
       // ignore
     }
@@ -159,7 +214,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
               园主身份验证 · 进入花园后台
             </h1>
             <p className="text-xs text-[var(--text-muted)] leading-relaxed">
-              这里是个人数字花园的管理中枢。验证园主密钥后，即可使用所见即所得编辑器撰文、管理草稿与私密内容、查看云端持久化诊断以及导出/恢复全站 ZIP 备份包。
+              这里是个人数字花园的管理中枢。验证园主密钥后，即可自定义全站顶部/底部文字与各个板块标题、使用可视化编辑器撰文、管理草稿与私密内容，以及导出/恢复全站 ZIP 备份包。
             </p>
           </div>
 
@@ -296,14 +351,30 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
   const handleSaveHomeConfig = async (e: React.FormEvent) => {
     e.preventDefault();
     await onUpdateProfile({
-      gardenName: gardenName.trim(),
+      gardenName: gardenName.trim() || '数字花园',
+      gardenSubtitle: gardenSubtitle.trim(),
+      footerText: footerText.trim(),
       heroTitle: heroTitle.trim(),
       heroIntro: heroIntro.trim(),
       heroQuote: heroQuote.trim(),
       seasonNote: seasonNote.trim(),
       homeModules,
+      sectionTitles,
     });
-    notify('首页文案与模块显示配置已保存并同步至 Cloud Firestore');
+    if (onUpdateCategories) {
+      await onUpdateCategories({
+        articleCategories,
+        collectionCategories,
+      });
+    }
+    notify('全站文案、顶部副标题、底部文字、各栏目名称与分类已全部保存并实时同步至云端！');
+  };
+
+  const updateSectionField = (key: keyof SiteSectionTitles, val: string) => {
+    setSectionTitles((prev) => ({
+      ...prev,
+      [key]: val,
+    }));
   };
 
   return (
@@ -319,7 +390,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
             </span>
           </div>
           <h1 className="font-serif-editorial text-3xl font-semibold">
-            栖迟园 · 内容管理与数据备份迁移中心
+            {garden.profile.gardenName || '数字花园'} · 全站自定义与内容管理中心
           </h1>
         </div>
 
@@ -413,6 +484,36 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
         <button
           type="button"
           role="tab"
+          aria-selected={activeTab === 'aiAgent'}
+          onClick={() => setActiveTab('aiAgent')}
+          className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-medium cursor-pointer ${
+            activeTab === 'aiAgent'
+              ? 'bg-[#687a56] text-[#faf6f1]'
+              : 'bg-[var(--bg-elevated)] border border-[var(--border-organic)] text-[var(--text-muted)]'
+          }`}
+        >
+          <Sparkles className="w-3.5 h-3.5" />
+          <span>ChatGPT / AI 接管与 API</span>
+        </button>
+
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'homeConfig'}
+          onClick={() => setActiveTab('homeConfig')}
+          className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-medium cursor-pointer ${
+            activeTab === 'homeConfig'
+              ? 'bg-[#687a56] text-[#faf6f1]'
+              : 'bg-[var(--bg-elevated)] border border-[var(--border-organic)] text-[var(--text-muted)]'
+          }`}
+        >
+          <Settings className="w-3.5 h-3.5" />
+          <span>全站自定义与门面配置</span>
+        </button>
+
+        <button
+          type="button"
+          role="tab"
           aria-selected={activeTab === 'backup'}
           onClick={() => setActiveTab('backup')}
           className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-medium cursor-pointer ${
@@ -453,21 +554,6 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
         >
           <Sparkles className="w-3.5 h-3.5" />
           <span>日常瞬间管理 ({garden.moments.length})</span>
-        </button>
-
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeTab === 'homeConfig'}
-          onClick={() => setActiveTab('homeConfig')}
-          className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-medium cursor-pointer ${
-            activeTab === 'homeConfig'
-              ? 'bg-[#687a56] text-[#faf6f1]'
-              : 'bg-[var(--bg-elevated)] border border-[var(--border-organic)] text-[var(--text-muted)]'
-          }`}
-        >
-          <Settings className="w-3.5 h-3.5" />
-          <span>首页文案与模块布局</span>
         </button>
       </div>
 
@@ -600,7 +686,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
                       ? `已选择备份包：${selectedZipFile.name} (${(
                           selectedZipFile.size / 1024
                         ).toFixed(1)} KB)`
-                      : '点击选择要恢复的栖迟园 .zip 完整备份包'}
+                      : '点击选择要恢复的 .zip 完整备份包'}
                   </span>
                   <span>支持备份预检、隔离沙箱演练与正式恢复</span>
                 </button>
@@ -697,7 +783,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
                     </div>
                   </div>
 
-                  {/* Warnings (Duplicates, Missing Files, Broken Relations) */}
+                  {/* Warnings */}
                   {inspectionResult.warnings.length > 0 && (
                     <div className="p-3 rounded-xl bg-[#d4a373]/15 border border-[#d4a373] space-y-1">
                       <span className="font-semibold text-[var(--text-primary)] block">
@@ -868,224 +954,1080 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
       {/* TAB 2: ARTICLES & DRAFTS MANAGEMENT */}
       {activeTab === 'articles' && (
         <div className="space-y-4">
-          {garden.articles.map((art) => (
-            <div
-              key={art.id}
-              className="p-5 rounded-2xl bg-[var(--bg-elevated)] border border-[var(--border-organic)] flex flex-col sm:flex-row sm:items-center justify-between gap-4"
-            >
-              <div className="space-y-1">
-                <div className="text-xs text-[var(--text-muted)] flex flex-wrap items-center gap-x-2">
-                  <span className="font-medium text-[var(--text-primary)]">{art.category}</span>
-                  <span>·</span>
-                  <span>{formatEditorialDate(art.createdAt)}</span>
-                  <span>·</span>
-                  {art.status === 'public' && (
-                    <span className="inline-flex items-center gap-1 text-[#687a56] font-medium">
-                      <Globe className="w-3 h-3" /> 公开
-                    </span>
-                  )}
-                  {art.status === 'private' && (
-                    <span className="inline-flex items-center gap-1 text-[#d4a373] font-medium">
-                      <Lock className="w-3 h-3" /> 私人手札
-                    </span>
-                  )}
-                  {art.status === 'draft' && (
-                    <span className="inline-flex items-center gap-1 text-[var(--text-muted)] font-medium">
-                      <FileText className="w-3 h-3" /> 草稿
-                    </span>
-                  )}
+          {garden.articles.length === 0 ? (
+            <div className="p-8 rounded-2xl bg-[var(--bg-elevated)] border border-[var(--border-organic)] text-center text-sm text-[var(--text-muted)]">
+              当前暂无文章，点击右上角「写新文章」开始记录。
+            </div>
+          ) : (
+            garden.articles.map((art) => (
+              <div
+                key={art.id}
+                className="p-5 rounded-2xl bg-[var(--bg-elevated)] border border-[var(--border-organic)] flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+              >
+                <div className="space-y-1">
+                  <div className="text-xs text-[var(--text-muted)] flex flex-wrap items-center gap-x-2">
+                    <span className="font-medium text-[var(--text-primary)]">{art.category}</span>
+                    <span>·</span>
+                    <span>{formatEditorialDate(art.createdAt)}</span>
+                    <span>·</span>
+                    {art.status === 'public' && (
+                      <span className="inline-flex items-center gap-1 text-[#687a56] font-medium">
+                        <Globe className="w-3 h-3" /> 公开
+                      </span>
+                    )}
+                    {art.status === 'private' && (
+                      <span className="inline-flex items-center gap-1 text-[#d4a373] font-medium">
+                        <Lock className="w-3 h-3" /> 私人手札
+                      </span>
+                    )}
+                    {art.status === 'draft' && (
+                      <span className="inline-flex items-center gap-1 text-[var(--text-muted)] font-medium">
+                        <FileText className="w-3 h-3" /> 草稿
+                      </span>
+                    )}
+                  </div>
+
+                  <h3 className="font-serif-editorial text-lg font-semibold">
+                    {art.title}
+                  </h3>
+                  <p className="text-xs text-[var(--text-muted)] line-clamp-1">
+                    {art.excerpt}
+                  </p>
                 </div>
 
-                <h3 className="font-serif-editorial text-lg font-semibold">
-                  {art.title}
-                </h3>
-                <p className="text-xs text-[var(--text-muted)] line-clamp-1">
-                  {art.excerpt}
-                </p>
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
+                  <select
+                    aria-label={`修改文章 ${art.title} 的可见状态`}
+                    value={art.status}
+                    onChange={async (e) => {
+                      const nextStatus = e.target.value as VisibilityStatus;
+                      await onUpdateArticleStatus(art.id, nextStatus);
+                      notify(`已将《${art.title}》状态设为 ${nextStatus}`);
+                    }}
+                    className="text-xs px-2.5 py-1.5 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-organic)]"
+                  >
+                    <option value="public">设为公开</option>
+                    <option value="private">设为私人</option>
+                    <option value="draft">移至草稿</option>
+                  </select>
+
+                  <button
+                    type="button"
+                    onClick={() => onEditArticle(art)}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-[#687a56] text-[#faf6f1] text-xs font-medium cursor-pointer"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" />
+                    <span>继续编辑</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await onDeleteArticle(art.id);
+                      notify(`已删除文章《${art.title}》`);
+                    }}
+                    className="p-1.5 rounded-xl border border-[var(--border-organic)] hover:text-[#b55346] cursor-pointer"
+                    aria-label={`删除 ${art.title}`}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
-
-              <div className="flex flex-wrap items-center gap-2 shrink-0">
-                <select
-                  aria-label={`修改文章 ${art.title} 的可见状态`}
-                  value={art.status}
-                  onChange={async (e) => {
-                    const nextStatus = e.target.value as VisibilityStatus;
-                    await onUpdateArticleStatus(art.id, nextStatus);
-                    notify(`已将《${art.title}》状态设为 ${nextStatus}`);
-                  }}
-                  className="text-xs px-2.5 py-1.5 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-organic)]"
-                >
-                  <option value="public">设为公开</option>
-                  <option value="private">设为私人</option>
-                  <option value="draft">移至草稿</option>
-                </select>
-
-                <button
-                  type="button"
-                  onClick={() => onEditArticle(art)}
-                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-[#687a56] text-[#faf6f1] text-xs font-medium cursor-pointer"
-                >
-                  <Edit3 className="w-3.5 h-3.5" />
-                  <span>继续编辑</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={async () => {
-                    await onDeleteArticle(art.id);
-                    notify(`已删除文章《${art.title}》`);
-                  }}
-                  className="p-1.5 rounded-xl border border-[var(--border-organic)] hover:text-[#b55346] cursor-pointer"
-                  aria-label={`删除 ${art.title}`}
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-          ))}
+            ))
+          )}
         </div>
       )}
 
       {/* TAB 3: MOMENTS MANAGEMENT */}
       {activeTab === 'moments' && (
         <div className="space-y-3">
-          {garden.moments.map((m) => (
-            <div
-              key={m.id}
-              className="p-4 rounded-2xl bg-[var(--bg-elevated)] border border-[var(--border-organic)] flex items-center justify-between gap-4"
-            >
-              <div className="space-y-1">
-                <div className="text-xs text-[var(--text-muted)]">
-                  {formatEditorialDate(m.createdAt)} ·{' '}
-                  {m.status === 'private' ? '私人瞬间' : '公开瞬间'}
-                </div>
-                <p className="text-sm line-clamp-2">{m.content}</p>
-              </div>
-              <button
-                type="button"
-                onClick={async () => {
-                  await onDeleteMoment(m.id);
-                  notify('已删除该条瞬间');
-                }}
-                className="p-2 rounded-xl border border-[var(--border-organic)] hover:text-[#b55346] cursor-pointer"
-                aria-label="删除瞬间"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
+          {garden.moments.length === 0 ? (
+            <div className="p-8 rounded-2xl bg-[var(--bg-elevated)] border border-[var(--border-organic)] text-center text-sm text-[var(--text-muted)]">
+              当前暂无日常瞬间。
             </div>
-          ))}
+          ) : (
+            garden.moments.map((m) => (
+              <div
+                key={m.id}
+                className="p-4 rounded-2xl bg-[var(--bg-elevated)] border border-[var(--border-organic)] flex items-center justify-between gap-4"
+              >
+                <div className="space-y-1">
+                  <div className="text-xs text-[var(--text-muted)]">
+                    {formatEditorialDate(m.createdAt)} ·{' '}
+                    {m.status === 'private' ? '私人瞬间' : '公开瞬间'}
+                  </div>
+                  <p className="text-sm line-clamp-2">{m.content}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await onDeleteMoment(m.id);
+                    notify('已删除该条瞬间');
+                  }}
+                  className="p-2 rounded-xl border border-[var(--border-organic)] hover:text-[#b55346] cursor-pointer"
+                  aria-label="删除瞬间"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            ))
+          )}
         </div>
       )}
 
-      {/* TAB 4: HOMEPAGE CONFIGURATION */}
+      {/* TAB 4: FULL SITE CUSTOMIZATION & HOMEPAGE CONFIGURATION */}
       {activeTab === 'homeConfig' && (
-        <form
-          onSubmit={handleSaveHomeConfig}
-          className="p-6 sm:p-8 rounded-2xl bg-[var(--bg-elevated)] border border-[var(--border-organic)] space-y-5"
-        >
-          <h2 className="font-serif-editorial text-xl font-semibold">
-            自定义首页门面文案与模块开关
-          </h2>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs text-[var(--text-muted)] mb-1">数字花园名称</label>
-              <input
-                type="text"
-                value={gardenName}
-                onChange={(e) => setGardenName(e.target.value)}
-                className="w-full text-sm px-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-organic)]"
-              />
+        <form onSubmit={handleSaveHomeConfig} className="space-y-8">
+          {/* 1. Header Brand & Footer Text Customization */}
+          <div className="p-6 sm:p-8 rounded-2xl bg-[var(--bg-elevated)] border border-[var(--border-organic)] space-y-5">
+            <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-[var(--border-organic)]">
+              <div>
+                <h2 className="font-serif-editorial text-xl font-semibold">
+                  一、顶部站点名称与网页底部签名设置
+                </h2>
+                <p className="text-xs text-[var(--text-muted)] mt-1">
+                  完全自定义顶部导航栏站点名称、旁边的副标题以及网页最底部的自定义文字（留空即可直接隐藏对应项，绝不强制显示或截断）。
+                </p>
+              </div>
+              <button
+                type="submit"
+                className="px-5 py-2 rounded-xl bg-[#687a56] text-[#faf6f1] text-xs font-medium cursor-pointer"
+              >
+                保存全站配置
+              </button>
             </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs text-[var(--text-muted)] mb-1">
+                  顶部站点名称（如：竹林）
+                </label>
+                <input
+                  type="text"
+                  value={gardenName}
+                  onChange={(e) => setGardenName(e.target.value)}
+                  placeholder="请输入站点名称"
+                  className="w-full text-sm px-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-organic)]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs text-[var(--text-muted)] mb-1">
+                  顶部站点副标题（显示在站点名右侧，留空则完全隐藏）
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={gardenSubtitle}
+                    onChange={(e) => setGardenSubtitle(e.target.value)}
+                    placeholder="留空则不显示任何副标题"
+                    className="flex-1 text-sm px-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-organic)]"
+                  />
+                  {gardenSubtitle && (
+                    <button
+                      type="button"
+                      onClick={() => setGardenSubtitle('')}
+                      className="px-3 py-2 rounded-xl border border-[var(--border-organic)] text-xs text-[var(--text-muted)] hover:text-[#b55346] cursor-pointer"
+                    >
+                      清空隐藏
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
             <div>
               <label className="block text-xs text-[var(--text-muted)] mb-1">
-                节气与生活状态栏（首页顶部展示）
+                网页底部自定义文字（完整展示不截断；留空则隐藏底部文字）
               </label>
-              <input
-                type="text"
-                value={seasonNote}
-                onChange={(e) => setSeasonNote(e.target.value)}
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={footerText}
+                  onChange={(e) => setFooterText(e.target.value)}
+                  placeholder="输入你想放在网页底部的句子，或留空隐藏"
+                  className="flex-1 text-sm px-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-organic)]"
+                />
+                {footerText && (
+                  <button
+                    type="button"
+                    onClick={() => setFooterText('')}
+                    className="px-3 py-2 rounded-xl border border-[var(--border-organic)] text-xs text-[var(--text-muted)] hover:text-[#b55346] cursor-pointer"
+                  >
+                    清空隐藏
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* 2. Homepage Hero & Modules */}
+          <div className="p-6 sm:p-8 rounded-2xl bg-[var(--bg-elevated)] border border-[var(--border-organic)] space-y-5">
+            <h2 className="font-serif-editorial text-xl font-semibold pb-3 border-b border-[var(--border-organic)]">
+              二、首页主视觉文案与板块开关
+            </h2>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs text-[var(--text-muted)] mb-1">
+                  首页主视觉大标题
+                </label>
+                <input
+                  type="text"
+                  value={heroTitle}
+                  onChange={(e) => setHeroTitle(e.target.value)}
+                  className="w-full text-sm px-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-organic)]"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-[var(--text-muted)] mb-1">
+                  节气与生活状态栏（首页顶部胶囊，留空则隐藏）
+                </label>
+                <input
+                  type="text"
+                  value={seasonNote}
+                  onChange={(e) => setSeasonNote(e.target.value)}
+                  placeholder="留空则隐藏"
+                  className="w-full text-sm px-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-organic)]"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs text-[var(--text-muted)] mb-1">
+                首页欢迎导语（留空则隐藏）
+              </label>
+              <textarea
+                rows={2}
+                value={heroIntro}
+                onChange={(e) => setHeroIntro(e.target.value)}
+                placeholder="留空则隐藏导语段落"
                 className="w-full text-sm px-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-organic)]"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs text-[var(--text-muted)] mb-1">
+                  首页寄语引用框（留空则隐藏引用框）
+                </label>
+                <input
+                  type="text"
+                  value={heroQuote}
+                  onChange={(e) => setHeroQuote(e.target.value)}
+                  placeholder="留空则隐藏"
+                  className="w-full text-sm px-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-organic)]"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-[var(--text-muted)] mb-1">
+                  首页右侧名片角标文字（默认：园主小像）
+                </label>
+                <input
+                  type="text"
+                  value={sectionTitles.ownerCardBadge ?? '园主小像'}
+                  onChange={(e) =>
+                    updateSectionField('ownerCardBadge', e.target.value)
+                  }
+                  className="w-full text-sm px-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-organic)]"
+                />
+              </div>
+            </div>
+
+            <div className="pt-2">
+              <span className="block text-xs text-[var(--text-muted)] mb-3">
+                首页板块显示开关（勾选即在首页展示）：
+              </span>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
+                {(
+                  [
+                    { key: 'showFeaturedArticles', label: '精选与最新文章模块' },
+                    { key: 'showMoments', label: '最近生活瞬间模块' },
+                    { key: 'showGallery', label: '光影相册预览模块' },
+                    { key: 'showTravel', label: '远行足迹预览模块' },
+                    { key: 'showCollections', label: '器物与收藏预览模块' },
+                    { key: 'showAlmanac', label: '节气生活手历卡片' },
+                  ] as const
+                ).map((mod) => (
+                  <label
+                    key={mod.key}
+                    className="p-3 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-organic)] flex items-center gap-2 cursor-pointer"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={homeModules[mod.key]}
+                      onChange={(e) =>
+                        setHomeModules({
+                          ...homeModules,
+                          [mod.key]: e.target.checked,
+                        })
+                      }
+                      className="accent-[#687a56]"
+                    />
+                    <span>{mod.label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* 3. Custom Section & Page Titles */}
+          <div className="p-6 sm:p-8 rounded-2xl bg-[var(--bg-elevated)] border border-[var(--border-organic)] space-y-5">
+            <div>
+              <h2 className="font-serif-editorial text-xl font-semibold">
+                三、全站各栏目与板块标题自定义
+              </h2>
+              <p className="text-xs text-[var(--text-muted)] mt-1">
+                你可以自由修改首页各板块标题以及各个独立栏目页的标题与导语说明。
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+              <div>
+                <label className="block text-[var(--text-muted)] mb-1">
+                  首页文章板块标题
+                </label>
+                <input
+                  type="text"
+                  value={sectionTitles.featuredArticlesTitle ?? '长文与手记'}
+                  onChange={(e) =>
+                    updateSectionField('featuredArticlesTitle', e.target.value)
+                  }
+                  className="w-full px-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-organic)]"
+                />
+              </div>
+              <div>
+                <label className="block text-[var(--text-muted)] mb-1">
+                  首页文章板块副标题（可留空）
+                </label>
+                <input
+                  type="text"
+                  value={
+                    sectionTitles.featuredArticlesSubtitle ??
+                    '思考、游历与日常观察的慢速书写'
+                  }
+                  onChange={(e) =>
+                    updateSectionField(
+                      'featuredArticlesSubtitle',
+                      e.target.value
+                    )
+                  }
+                  className="w-full px-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-organic)]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[var(--text-muted)] mb-1">
+                  文章页大标题
+                </label>
+                <input
+                  type="text"
+                  value={sectionTitles.articlesPageTitle ?? '长文手记 · 漫长思考'}
+                  onChange={(e) =>
+                    updateSectionField('articlesPageTitle', e.target.value)
+                  }
+                  className="w-full px-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-organic)]"
+                />
+              </div>
+              <div>
+                <label className="block text-[var(--text-muted)] mb-1">
+                  文章页导语（可留空）
+                </label>
+                <input
+                  type="text"
+                  value={
+                    sectionTitles.articlesPageSubtitle ??
+                    '记录阅读、旅途、器物与日常里的细微顿悟。'
+                  }
+                  onChange={(e) =>
+                    updateSectionField('articlesPageSubtitle', e.target.value)
+                  }
+                  className="w-full px-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-organic)]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[var(--text-muted)] mb-1">
+                  瞬间页大标题
+                </label>
+                <input
+                  type="text"
+                  value={
+                    sectionTitles.momentsPageTitle ?? '日常瞬间 · 吉光片羽'
+                  }
+                  onChange={(e) =>
+                    updateSectionField('momentsPageTitle', e.target.value)
+                  }
+                  className="w-full px-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-organic)]"
+                />
+              </div>
+              <div>
+                <label className="block text-[var(--text-muted)] mb-1">
+                  瞬间页导语（可留空）
+                </label>
+                <input
+                  type="text"
+                  value={
+                    sectionTitles.momentsPageSubtitle ??
+                    '不必成篇的随手摘录。一朵云、一杯热茶、一句读到的话，或是深夜突然闪现的念头。'
+                  }
+                  onChange={(e) =>
+                    updateSectionField('momentsPageSubtitle', e.target.value)
+                  }
+                  className="w-full px-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-organic)]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[var(--text-muted)] mb-1">
+                  相册页大标题
+                </label>
+                <input
+                  type="text"
+                  value={
+                    sectionTitles.galleryPageTitle ?? '光影相册 · 胶片与数码记忆'
+                  }
+                  onChange={(e) =>
+                    updateSectionField('galleryPageTitle', e.target.value)
+                  }
+                  className="w-full px-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-organic)]"
+                />
+              </div>
+              <div>
+                <label className="block text-[var(--text-muted)] mb-1">
+                  相册页导语（可留空）
+                </label>
+                <input
+                  type="text"
+                  value={
+                    sectionTitles.galleryPageSubtitle ??
+                    '按主题与季节整理的私人摄影集。留存光线、空气与当时的心境。'
+                  }
+                  onChange={(e) =>
+                    updateSectionField('galleryPageSubtitle', e.target.value)
+                  }
+                  className="w-full px-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-organic)]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[var(--text-muted)] mb-1">
+                  远行足迹页大标题
+                </label>
+                <input
+                  type="text"
+                  value={
+                    sectionTitles.travelPageTitle ?? '远行足迹 · 山海漫游手卷'
+                  }
+                  onChange={(e) =>
+                    updateSectionField('travelPageTitle', e.target.value)
+                  }
+                  className="w-full px-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-organic)]"
+                />
+              </div>
+              <div>
+                <label className="block text-[var(--text-muted)] mb-1">
+                  远行地图左下角说明文字
+                </label>
+                <input
+                  type="text"
+                  value={
+                    sectionTitles.travelMapCaption ?? '点击坐标点切换目的地记录'
+                  }
+                  onChange={(e) =>
+                    updateSectionField('travelMapCaption', e.target.value)
+                  }
+                  className="w-full px-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-organic)]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[var(--text-muted)] mb-1">
+                  收藏页大标题
+                </label>
+                <input
+                  type="text"
+                  value={
+                    sectionTitles.collectionsPageTitle ??
+                    '器物与精神食粮 · 兴趣收藏室'
+                  }
+                  onChange={(e) =>
+                    updateSectionField('collectionsPageTitle', e.target.value)
+                  }
+                  className="w-full px-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-organic)]"
+                />
+              </div>
+              <div>
+                <label className="block text-[var(--text-muted)] mb-1">
+                  时间线页大标题
+                </label>
+                <input
+                  type="text"
+                  value={
+                    sectionTitles.timelinePageTitle ??
+                    '岁月年轮 · 全站记忆时间线'
+                  }
+                  onChange={(e) =>
+                    updateSectionField('timelinePageTitle', e.target.value)
+                  }
+                  className="w-full px-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-organic)]"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* 4. Custom Categories Management */}
+          <div className="p-6 sm:p-8 rounded-2xl bg-[var(--bg-elevated)] border border-[var(--border-organic)] space-y-6">
+            <div>
+              <h2 className="font-serif-editorial text-xl font-semibold">
+                四、文章分类与收藏馆分类管理
+              </h2>
+              <p className="text-xs text-[var(--text-muted)] mt-1">
+                自由增删属于你自己的文章分类与兴趣收藏分类，修改后点击底部保存即可生效。
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Article Categories */}
+              <div className="p-4 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-organic)] space-y-3">
+                <h3 className="text-xs font-semibold text-[var(--text-primary)]">
+                  文章分类列表 ({articleCategories.length})
+                </h3>
+                <div className="flex flex-wrap gap-2">
+                  {articleCategories.map((cat) => (
+                    <span
+                      key={cat}
+                      className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-organic)] text-xs"
+                    >
+                      <span>{cat}</span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setArticleCategories(
+                            articleCategories.filter((c) => c !== cat)
+                          )
+                        }
+                        className="text-[var(--text-muted)] hover:text-[#b55346] cursor-pointer"
+                        title="删除该分类"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+                <div className="flex gap-2 pt-1">
+                  <input
+                    type="text"
+                    value={newArtCat}
+                    onChange={(e) => setNewArtCat(e.target.value)}
+                    placeholder="输入新文章分类名称"
+                    className="flex-1 text-xs px-3 py-1.5 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-organic)]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const v = newArtCat.trim();
+                      if (v && !articleCategories.includes(v)) {
+                        setArticleCategories([...articleCategories, v]);
+                        setNewArtCat('');
+                      }
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-[#687a56] text-[#faf6f1] text-xs cursor-pointer"
+                  >
+                    添加分类
+                  </button>
+                </div>
+              </div>
+
+              {/* Collection Categories */}
+              <div className="p-4 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-organic)] space-y-3">
+                <h3 className="text-xs font-semibold text-[var(--text-primary)]">
+                  兴趣收藏分类列表 ({collectionCategories.length})
+                </h3>
+                <div className="flex flex-wrap gap-2">
+                  {collectionCategories.map((cat) => (
+                    <span
+                      key={cat.id}
+                      className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-organic)] text-xs"
+                    >
+                      <span>
+                        {cat.label} ({cat.id})
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setCollectionCategories(
+                            collectionCategories.filter((c) => c.id !== cat.id)
+                          )
+                        }
+                        className="text-[var(--text-muted)] hover:text-[#b55346] cursor-pointer"
+                        title="删除该分类"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+                <div className="flex gap-2 pt-1">
+                  <input
+                    type="text"
+                    value={newColCatId}
+                    onChange={(e) => setNewColCatId(e.target.value)}
+                    placeholder="英文代号(如 game)"
+                    className="w-28 text-xs px-2.5 py-1.5 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-organic)]"
+                  />
+                  <input
+                    type="text"
+                    value={newColCatLabel}
+                    onChange={(e) => setNewColCatLabel(e.target.value)}
+                    placeholder="分类名称(如 游戏与主机)"
+                    className="flex-1 text-xs px-2.5 py-1.5 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-organic)]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const id = newColCatId.trim();
+                      const label = newColCatLabel.trim();
+                      if (
+                        id &&
+                        label &&
+                        !collectionCategories.some((c) => c.id === id)
+                      ) {
+                        setCollectionCategories([
+                          ...collectionCategories,
+                          { id, label },
+                        ]);
+                        setNewColCatId('');
+                        setNewColCatLabel('');
+                      }
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-[#687a56] text-[#faf6f1] text-xs cursor-pointer"
+                  >
+                    添加
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-2 border-t border-[var(--border-organic)]">
+              <button
+                type="submit"
+                className="px-6 py-2.5 rounded-xl bg-[#687a56] text-[#faf6f1] text-xs sm:text-sm font-medium hover:bg-[#586947] cursor-pointer shadow-xs"
+              >
+                保存全站自定义设置
+              </button>
+            </div>
+          </div>
+        </form>
+      )}
+
+      {/* TAB 5: CHATGPT / AI AGENT INTEGRATION & OPENAPI */}
+      {activeTab === 'aiAgent' && (
+        <div className="space-y-8">
+          {/* 0. Direct Chat Mode (MCP Connector + @Mention like Gmail/Outlook) */}
+          <div className="p-6 sm:p-8 rounded-2xl bg-[var(--bg-elevated)] border-2 border-[#687a56]/40 space-y-6">
+            <div className="flex flex-wrap items-start justify-between gap-4 pb-4 border-b border-[var(--border-organic)]">
+              <div className="space-y-1">
+                <span className="text-xs text-[#687a56] font-semibold">
+                  原生支持 MCP 连接器协议 · 像在聊天里让 ChatGPT 查发邮件一样直接操作博客
+                </span>
+                <h2 className="font-serif-editorial text-2xl font-semibold">
+                  在 ChatGPT 普通聊天模式里直接指挥它写文章、改网站
+                </h2>
+                <p className="text-xs text-[var(--text-muted)] max-w-3xl leading-relaxed">
+                  你之所以能在普通聊天框里直接让 ChatGPT 动你的邮箱，是因为邮箱通过 <strong>连接器 (Connectors / MCP)</strong> 或 <strong>@应用召唤</strong> 挂载到了主聊天框。现在你的博客也已内置同款 <strong>MCP 远程连接器服务</strong>，下面两种方式都能让你在日常聊天窗口里直接一句话指挥它！
+                </p>
+              </div>
+            </div>
+
+            {/* Method A & Method B comparison cards */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+              {/* Method A: Native ChatGPT Connector (MCP) */}
+              <div className="p-5 rounded-2xl bg-[var(--bg-primary)] border border-[var(--border-organic)] space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-[#687a56]">
+                    方式一：挂载到 ChatGPT「连接器 (Connectors)」（和邮箱完全同款）
+                  </span>
+                  <span className="text-[11px] text-[var(--text-muted)]">
+                    免填 Header · 密钥已内嵌于专属连接地址
+                  </span>
+                </div>
+                <div className="space-y-2">
+                  <label className="block text-xs text-[var(--text-secondary)] font-medium">
+                    你的专属 MCP 连接器地址（点击复制）：
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      readOnly
+                      value={
+                        agentInfo?.mcpUrl ||
+                        `https://river05531.ai.studio/mcp/${agentInfo?.apiKey || 'gdn_live_8ee9f04686590079dcd2a6159f49a68e'}`
+                      }
+                      aria-label="MCP 连接器地址"
+                      className="flex-1 font-mono text-xs px-3 py-2 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-organic)]"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const url =
+                          agentInfo?.mcpUrl ||
+                          `https://river05531.ai.studio/mcp/${agentInfo?.apiKey || 'gdn_live_8ee9f04686590079dcd2a6159f49a68e'}`;
+                        navigator.clipboard?.writeText(url);
+                        notify('已复制专属 MCP 连接器地址！');
+                      }}
+                      className="px-3.5 py-2 rounded-xl bg-[#687a56] text-[#faf6f1] text-xs font-medium cursor-pointer"
+                    >
+                      复制 MCP 地址
+                    </button>
+                  </div>
+                </div>
+                <div className="p-3 rounded-xl bg-[#d4a373]/15 border border-[#d4a373] text-xs text-[var(--text-primary)] leading-relaxed">
+                  <strong>⚠️ 重要前提（必看）：</strong>在 ChatGPT 点击「创建为插件」之前，请务必先点击当前 AI Studio 页面右上角的 <strong>「Deploy / 部署（更新线上版本）」</strong> 按钮！因为 ChatGPT 访问的是线上正式域名 <code className="font-mono">river05531.ai.studio</code>，只有点击部署后，最新的 <code className="font-mono">/mcp</code> 接口才会在正式域名生效。
+                </div>
+                <ol className="text-xs text-[var(--text-secondary)] space-y-1.5 list-decimal list-inside leading-relaxed">
+                  <li>
+                    先点击 AI Studio 右上角 <strong>Deploy</strong> 发布更新，等待约 30 秒部署完成。
+                  </li>
+                  <li>
+                    在 ChatGPT「添加自定义 MCP 服务器」窗口中，名称填 <code className="font-mono text-[#687a56]">竹林博客</code>，服务器 URL 粘贴上方复制的 <strong>MCP 连接器地址</strong>，身份验证选 <strong>无需身份验证</strong>，点击「创建为插件」。
+                  </li>
+                  <li>
+                    创建成功后，回到<strong>平时随便聊天的普通窗口</strong>，直接对它说：<em>“帮我写一篇关于春夜听雨的随笔发到博客上”</em>，它就会像发邮件一样直接帮你发布！
+                  </li>
+                </ol>
+              </div>
+
+              {/* Method B: @Mention in normal chat */}
+              <div className="p-5 rounded-2xl bg-[var(--bg-primary)] border border-[var(--border-organic)] space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-[#687a56]">
+                    方式二：在普通聊天框直接输入 @ 召唤（零切换窗口）
+                  </span>
+                  <span className="text-[11px] text-[var(--text-muted)]">
+                    适用于所有 Plus / Pro / Team 账号
+                  </span>
+                </div>
+                <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
+                  如果你已经按下方步骤创建好了名为「竹林主笔」的 GPT，你<strong>根本不需要专门点进那个 GPT 的独立页面</strong>：
+                </p>
+                <ol className="text-xs text-[var(--text-secondary)] space-y-2 list-decimal list-inside leading-relaxed">
+                  <li>
+                    留在你平时日常使用的<strong>普通 ChatGPT 聊天窗口</strong>（甚至可以和查邮件在同一个对话里）。
+                  </li>
+                  <li>
+                    在聊天输入框里直接打一个 <code className="px-1.5 py-0.5 rounded bg-[var(--bg-elevated)] border border-[var(--border-organic)] font-mono text-[#687a56]">@</code> 符号，菜单会自动弹出你创建的<strong>「@竹林主笔」</strong>。
+                  </li>
+                  <li>
+                    回车选中它，直接说：
+                    <span className="block mt-1 p-2.5 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-organic)] text-[var(--text-primary)]">
+                      “@竹林主笔 把我刚才聊的这段感悟整理成一篇随笔发到我的博客里，顺便把网站底部的诗句改成‘明月松间照，清泉石上流’。”
+                    </span>
+                  </li>
+                  <li>
+                    它会在当前普通聊天里直接调用博客接口完成发布与修改，无需离开当前对话！
+                  </li>
+                </ol>
+              </div>
+            </div>
+          </div>
+
+          {/* 1. API Key & Quick Setup Card */}
+          <div className="p-6 sm:p-8 rounded-2xl bg-[var(--bg-elevated)] border border-[var(--border-organic)] space-y-6">
+            <div className="flex flex-wrap items-start justify-between gap-4 pb-4 border-b border-[var(--border-organic)]">
+              <div className="space-y-1">
+                <span className="text-xs text-[#687a56] font-medium">
+                  OpenAPI 3.1.0 标准协议 · 自动支持 Markdown 转富文本排版
+                </span>
+                <h2 className="font-serif-editorial text-2xl font-semibold">
+                  OpenAPI 凭证与 Custom GPT 绑定配置
+                </h2>
+                <p className="text-xs text-[var(--text-muted)] max-w-3xl leading-relaxed">
+                  无论是配置上面的 MCP 连接器，还是配置 Custom GPT Actions，下方都是你的全站最高权限凭证。
+                </p>
+              </div>
+            </div>
+
+            {/* Credentials Strip */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="p-4 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-organic)] space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-[var(--text-primary)]">
+                    1. 专属永久 AI API Key (Bearer Token)
+                  </span>
+                  <span className="text-[11px] text-[#687a56]">
+                    云端持久化 · 实例重启永不失效
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    readOnly
+                    value={agentInfo?.apiKey || '正在加载密钥…'}
+                    aria-label="专属 AI API Key"
+                    className="flex-1 font-mono text-xs px-3 py-2 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-organic)]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (agentInfo?.apiKey) {
+                        navigator.clipboard?.writeText(agentInfo.apiKey);
+                        notify('已复制专属 AI API Key');
+                      }
+                    }}
+                    className="px-3 py-2 rounded-xl bg-[#687a56] text-[#faf6f1] text-xs font-medium cursor-pointer"
+                  >
+                    复制 Key
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        const res = await regenerateAgentApiKey();
+                        setAgentInfo((prev) =>
+                          prev
+                            ? {
+                                ...prev,
+                                apiKey: res.apiKey,
+                                mcpUrl: res.mcpUrl,
+                                sseUrl: res.sseUrl,
+                                systemPrompt: res.systemPrompt,
+                              }
+                            : null
+                        );
+                        notify(res.message);
+                      } catch (err) {
+                        notifyError(
+                          err instanceof Error ? err.message : '重置失败'
+                        );
+                      }
+                    }}
+                    className="px-3 py-2 rounded-xl border border-[var(--border-organic)] text-xs text-[var(--text-muted)] hover:text-[#b55346] cursor-pointer"
+                  >
+                    重置更换
+                  </button>
+                </div>
+                <p className="text-[11px] text-[var(--text-muted)]">
+                  注：除了此专属 Key，你也随时可以直接用你的园主登录密码作为 Bearer Token 调用所有接口。
+                </p>
+              </div>
+
+              <div className="p-4 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-organic)] space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-[var(--text-primary)]">
+                    2. OpenAPI 3.1.0 规范地址（供 GPT Actions 导入）
+                  </span>
+                  <span className="text-[11px] text-[var(--text-muted)]">
+                    支持 URL 导入或直接复制 JSON
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    readOnly
+                    value={
+                      agentInfo?.openApiUrl ||
+                      'https://river05531.ai.studio/openapi.json'
+                    }
+                    aria-label="OpenAPI 规范地址"
+                    className="flex-1 font-mono text-xs px-3 py-2 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-organic)]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const url =
+                        agentInfo?.openApiUrl ||
+                        'https://river05531.ai.studio/openapi.json';
+                      navigator.clipboard?.writeText(url);
+                      notify('已复制 OpenAPI 规范 URL');
+                    }}
+                    className="px-3 py-2 rounded-xl bg-[#687a56] text-[#faf6f1] text-xs font-medium cursor-pointer"
+                  >
+                    复制 URL
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const spec = buildOpenApiSpec(
+                        agentInfo?.productionUrl ||
+                          'https://river05531.ai.studio',
+                        garden.profile.gardenName
+                      );
+                      navigator.clipboard?.writeText(
+                        JSON.stringify(spec, null, 2)
+                      );
+                      notify(
+                        '已复制完整 OpenAPI 3.1.0 JSON Schema，可直接粘贴到 ChatGPT Actions Schema 框中！'
+                      );
+                    }}
+                    className="px-3 py-2 rounded-xl border border-[#687a56] text-[#687a56] text-xs font-medium cursor-pointer"
+                  >
+                    复制完整 Schema
+                  </button>
+                </div>
+                <p className="text-[11px] text-[var(--text-muted)]">
+                  在 ChatGPT 创建 GPT → Configure → Actions → 点击「Import from URL」粘贴上方地址，或直接点击「复制完整 Schema」粘贴到 Schema 框中。
+                </p>
+              </div>
+            </div>
+
+            {/* 3-Step Guide + System Prompt */}
+            <div className="p-5 rounded-2xl bg-[var(--bg-primary)] border border-[var(--border-organic)] space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h3 className="font-serif-editorial text-base font-semibold">
+                    3. 给 ChatGPT 的专属主笔提示词（Instructions / System Prompt）
+                  </h3>
+                  <p className="text-xs text-[var(--text-muted)]">
+                    将下方提示词复制到 ChatGPT 的「Instructions」框或直接发给 AI Agent，它就能明白如何替你写文章、发日常瞬间和打理博客：
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (agentInfo?.systemPrompt) {
+                      navigator.clipboard?.writeText(agentInfo.systemPrompt);
+                      notify('已复制 ChatGPT 专属主笔提示词！');
+                    }
+                  }}
+                  className="px-4 py-2 rounded-xl bg-[#687a56] text-[#faf6f1] text-xs font-medium cursor-pointer"
+                >
+                  一键复制提示词
+                </button>
+              </div>
+              <textarea
+                rows={7}
+                readOnly
+                value={agentInfo?.systemPrompt || ''}
+                aria-label="ChatGPT 系统提示词"
+                className="w-full font-mono text-xs p-3 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-organic)] leading-relaxed"
               />
             </div>
           </div>
 
-          <div>
-            <label className="block text-xs text-[var(--text-muted)] mb-1">首页主视觉标题</label>
-            <input
-              type="text"
-              value={heroTitle}
-              onChange={(e) => setHeroTitle(e.target.value)}
-              className="w-full text-sm px-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-organic)]"
-            />
-          </div>
+          {/* 2. Full API Endpoint Reference Table */}
+          <div className="p-6 sm:p-8 rounded-2xl bg-[var(--bg-elevated)] border border-[var(--border-organic)] space-y-5">
+            <div>
+              <h2 className="font-serif-editorial text-xl font-semibold">
+                完整 API 路径与参数速查表（基于 https://river05531.ai.studio）
+              </h2>
+              <p className="text-xs text-[var(--text-muted)] mt-1">
+                所有写入接口均在请求头携带 <code className="font-mono text-[#687a56]">Authorization: Bearer {agentInfo?.apiKey || '<API_KEY>'}</code>（或 <code className="font-mono">x-api-key</code>）。文章正文支持直接传入 Markdown 语法，服务端会自动转换为富文本 HTML 并提取摘要。
+              </p>
+            </div>
 
-          <div>
-            <label className="block text-xs text-[var(--text-muted)] mb-1">首页欢迎导语</label>
-            <textarea
-              rows={2}
-              value={heroIntro}
-              onChange={(e) => setHeroIntro(e.target.value)}
-              className="w-full text-sm px-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-organic)]"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs text-[var(--text-muted)] mb-1">花园寄语引用</label>
-            <input
-              type="text"
-              value={heroQuote}
-              onChange={(e) => setHeroQuote(e.target.value)}
-              className="w-full text-sm px-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-organic)]"
-            />
-          </div>
-
-          <div className="pt-2">
-            <span className="block text-xs text-[var(--text-muted)] mb-3">
-              首页板块显示开关：
-            </span>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
-              {(
-                [
-                  { key: 'showFeaturedArticles', label: '精选与最新文章模块' },
-                  { key: 'showMoments', label: '最近生活瞬间模块' },
-                  { key: 'showGallery', label: '光影相册预览模块' },
-                  { key: 'showTravel', label: '远行足迹预览模块' },
-                  { key: 'showCollections', label: '器物与收藏预览模块' },
-                  { key: 'showAlmanac', label: '节气生活手历卡片' },
-                ] as const
-              ).map((mod) => (
-                <label
-                  key={mod.key}
-                  className="p-3 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-organic)] flex items-center gap-2 cursor-pointer"
-                >
-                  <input
-                    type="checkbox"
-                    checked={homeModules[mod.key]}
-                    onChange={(e) =>
-                      setHomeModules({
-                        ...homeModules,
-                        [mod.key]: e.target.checked,
-                      })
-                    }
-                    className="accent-[#687a56]"
-                  />
-                  <span>{mod.label}</span>
-                </label>
-              ))}
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-[var(--border-organic)] text-[var(--text-muted)]">
+                    <th className="py-2.5 pr-4 font-semibold">方法</th>
+                    <th className="py-2.5 pr-4 font-semibold">完整接口路径</th>
+                    <th className="py-2.5 pr-4 font-semibold">功能说明</th>
+                    <th className="py-2.5 font-semibold">核心 JSON 参数示例</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[var(--border-organic)]">
+                  <tr>
+                    <td className="py-3 pr-4 font-mono text-[#687a56] font-bold">GET</td>
+                    <td className="py-3 pr-4 font-mono">
+                      https://river05531.ai.studio/api/agent/overview
+                    </td>
+                    <td className="py-3 pr-4">
+                      读取全站配置、分类、已有文章/瞬间/足迹/收藏列表与 ID
+                    </td>
+                    <td className="py-3 font-mono text-[var(--text-muted)]">无需 Body</td>
+                  </tr>
+                  <tr>
+                    <td className="py-3 pr-4 font-mono text-[#d4a373] font-bold">POST</td>
+                    <td className="py-3 pr-4 font-mono">
+                      https://river05531.ai.studio/api/agent/execute
+                    </td>
+                    <td className="py-3 pr-4">
+                      <strong>AI 全能一键代管接口</strong>（一次请求可同时发文、发瞬间、加足迹、加收藏、改全站配置）
+                    </td>
+                    <td className="py-3 font-mono text-[11px]">
+                      {`{"createArticle": {"title": "秋夜随笔", "content": "## 标题\\n正文内容", "category": "生活杂记"}}`}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="py-3 pr-4 font-mono text-[#d4a373] font-bold">POST</td>
+                    <td className="py-3 pr-4 font-mono">
+                      https://river05531.ai.studio/api/articles
+                    </td>
+                    <td className="py-3 pr-4">
+                      撰写并发布新文章（支持 Markdown 自动转排版 HTML，免填摘要自动生成）
+                    </td>
+                    <td className="py-3 font-mono text-[11px]">
+                      {`{"title": "标题", "content": "Markdown或HTML正文", "category": "山居随笔", "tags": ["日常"], "status": "public"}`}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="py-3 pr-4 font-mono text-[#687a56] font-bold">PUT</td>
+                    <td className="py-3 pr-4 font-mono">
+                      https://river05531.ai.studio/api/articles/:id
+                    </td>
+                    <td className="py-3 pr-4">
+                      修改或润色指定 ID 的已有文章/草稿
+                    </td>
+                    <td className="py-3 font-mono text-[11px]">
+                      {`{"title": "新标题", "content": "润色后的正文", "status": "public"}`}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="py-3 pr-4 font-mono text-[#d4a373] font-bold">POST</td>
+                    <td className="py-3 pr-4 font-mono">
+                      https://river05531.ai.studio/api/moments
+                    </td>
+                    <td className="py-3 pr-4">
+                      随手发布一条日常短瞬间/动态
+                    </td>
+                    <td className="py-3 font-mono text-[11px]">
+                      {`{"content": "窗外桂花落了一地。", "mood": "闲适", "location": "书房"}`}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="py-3 pr-4 font-mono text-[#d4a373] font-bold">POST</td>
+                    <td className="py-3 pr-4 font-mono">
+                      https://river05531.ai.studio/api/travel
+                    </td>
+                    <td className="py-3 pr-4">
+                      点亮并添加新的旅行足迹坐标与故事
+                    </td>
+                    <td className="py-3 font-mono text-[11px]">
+                      {`{"destination": "大理 · 沙溪", "region": "云南", "summary": "古镇听雨", "story": "详细游记..."}`}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="py-3 pr-4 font-mono text-[#d4a373] font-bold">POST</td>
+                    <td className="py-3 pr-4 font-mono">
+                      https://river05531.ai.studio/api/collections
+                    </td>
+                    <td className="py-3 pr-4">
+                      收录好物、电影、书籍、黑胶唱片等兴趣收藏
+                    </td>
+                    <td className="py-3 font-mono text-[11px]">
+                      {`{"title": "小森林", "creator": "森淳一", "category": "film", "rating": 5, "review": "治愈四季"}`}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="py-3 pr-4 font-mono text-[#687a56] font-bold">PUT</td>
+                    <td className="py-3 pr-4 font-mono">
+                      https://river05531.ai.studio/api/profile
+                    </td>
+                    <td className="py-3 pr-4">
+                      修改站点名称、顶部副标题、底部文字、首页大标题与关于页自述
+                    </td>
+                    <td className="py-3 font-mono text-[11px]">
+                      {`{"gardenName": "竹林", "gardenSubtitle": "", "footerText": "", "heroTitle": "渔樵夜归客"}`}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </div>
-
-          <div className="flex justify-end">
-            <button
-              type="submit"
-              className="px-5 py-2.5 rounded-xl bg-[#687a56] text-[#faf6f1] text-xs font-medium cursor-pointer"
-            >
-              保存首页配置
-            </button>
-          </div>
-        </form>
+        </div>
       )}
     </div>
   );
 };
+

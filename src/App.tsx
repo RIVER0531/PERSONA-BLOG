@@ -38,9 +38,12 @@ import {
   updateAlbumApi,
   deleteAlbumApi,
   createTravelApi,
+  updateTravelApi,
   deleteTravelApi,
   createCollectionApi,
+  updateCollectionApi,
   deleteCollectionApi,
+  updateCustomCategoriesApi,
 } from './utils/api';
 import { searchGardenContent } from './utils/gardenLogic';
 import { HomeView } from './components/HomeView';
@@ -130,7 +133,10 @@ export default function App() {
 
   // Dynamic Document Title for SEO
   useEffect(() => {
-    const baseName = `${garden.profile.gardenName} · 个人数字花园`;
+    const sub = garden.profile.gardenSubtitle?.trim();
+    const baseName = sub
+      ? `${garden.profile.gardenName} · ${sub}`
+      : garden.profile.gardenName;
     if (activePage === 'articles' && selectedArticleId) {
       const art = garden.articles.find((a) => a.id === selectedArticleId);
       if (art) {
@@ -140,15 +146,15 @@ export default function App() {
     }
     const pageNames: Record<ActivePage, string> = {
       home: baseName,
-      articles: `文章总集 | ${baseName}`,
-      editor: `可视化写作工坊 | ${baseName}`,
-      moments: `日常瞬间 | ${baseName}`,
-      gallery: `光影相册 | ${baseName}`,
-      travel: `远行足迹 | ${baseName}`,
-      collections: `兴趣收藏 | ${baseName}`,
-      timeline: `岁月时间线 | ${baseName}`,
-      about: `关于园主 | ${baseName}`,
-      admin: `花园后台管理 | ${baseName}`,
+      articles: `${garden.profile.sectionTitles?.articlesPageTitle || '文章'} | ${baseName}`,
+      editor: `写作工坊 | ${baseName}`,
+      moments: `${garden.profile.sectionTitles?.momentsPageTitle || '瞬间'} | ${baseName}`,
+      gallery: `${garden.profile.sectionTitles?.galleryPageTitle || '相册'} | ${baseName}`,
+      travel: `${garden.profile.sectionTitles?.travelPageTitle || '足迹'} | ${baseName}`,
+      collections: `${garden.profile.sectionTitles?.collectionsPageTitle || '收藏'} | ${baseName}`,
+      timeline: `${garden.profile.sectionTitles?.timelinePageTitle || '时间线'} | ${baseName}`,
+      about: `关于 | ${baseName}`,
+      admin: `后台管理 | ${baseName}`,
     };
     document.title = pageNames[activePage] || baseName;
   }, [activePage, selectedArticleId, garden]);
@@ -257,6 +263,11 @@ export default function App() {
     await loadFromServer();
   };
 
+  const handleUpdateTravel = async (id: string, travel: Partial<TravelFootprint>) => {
+    await updateTravelApi(id, travel);
+    await loadFromServer();
+  };
+
   const handleDeleteTravel = async (id: string) => {
     await deleteTravelApi(id);
     await loadFromServer();
@@ -267,6 +278,11 @@ export default function App() {
     await loadFromServer();
   };
 
+  const handleUpdateCollection = async (id: string, item: Partial<CollectionItem>) => {
+    await updateCollectionApi(id, item);
+    await loadFromServer();
+  };
+
   const handleDeleteCollection = async (id: string) => {
     await deleteCollectionApi(id);
     await loadFromServer();
@@ -274,6 +290,13 @@ export default function App() {
 
   const handleUpdateProfile = async (profileUpdate: Partial<SiteProfile>) => {
     await updateSiteProfile(profileUpdate);
+    await loadFromServer();
+  };
+
+  const handleUpdateCategories = async (
+    customCategories: Partial<GardenDatabase['customCategories']>
+  ) => {
+    await updateCustomCategoriesApi(customCategories);
     await loadFromServer();
   };
 
@@ -322,9 +345,11 @@ export default function App() {
               <span className="font-serif-editorial text-lg sm:text-xl font-semibold tracking-tight block leading-none whitespace-nowrap">
                 {garden.profile.gardenName}
               </span>
-              <span className="hidden sm:block text-[11px] text-[var(--text-muted)] mt-0.5 whitespace-nowrap">
-                Personal Digital Garden
-              </span>
+              {garden.profile.gardenSubtitle && garden.profile.gardenSubtitle.trim() && (
+                <span className="hidden sm:block text-[11px] text-[var(--text-muted)] mt-0.5 whitespace-nowrap">
+                  {garden.profile.gardenSubtitle}
+                </span>
+              )}
             </div>
           </button>
 
@@ -474,7 +499,7 @@ export default function App() {
           <div className="max-w-4xl mx-auto px-4 py-24 text-center space-y-3">
             <div className="w-8 h-8 rounded-full border-2 border-[#687a56] border-t-transparent animate-spin mx-auto" />
             <p className="font-serif-editorial text-sm text-[var(--text-muted)]">
-              正在推开栖迟园的木门……
+              正在载入 {garden.profile.gardenName}……
             </p>
           </div>
         ) : (
@@ -492,6 +517,7 @@ export default function App() {
               <ArticlesView
                 articles={garden.articles}
                 categories={garden.customCategories.articleCategories}
+                sectionTitles={garden.profile.sectionTitles}
                 selectedArticleId={selectedArticleId}
                 isAdmin={isAdmin}
                 onSelectArticle={(id) => setSelectedArticleId(id)}
@@ -523,6 +549,7 @@ export default function App() {
             {activePage === 'moments' && (
               <MomentsView
                 moments={garden.moments}
+                sectionTitles={garden.profile.sectionTitles}
                 isAdmin={isAdmin}
                 onCreateMoment={handleCreateMoment}
                 onUpdateMoment={handleUpdateMoment}
@@ -533,6 +560,7 @@ export default function App() {
             {activePage === 'gallery' && (
               <GalleryView
                 albums={garden.albums}
+                sectionTitles={garden.profile.sectionTitles}
                 isAdmin={isAdmin}
                 onCreateAlbum={handleCreateAlbum}
                 onUpdateAlbum={handleUpdateAlbum}
@@ -545,8 +573,10 @@ export default function App() {
                 travels={garden.travels}
                 articles={garden.articles}
                 albums={garden.albums}
+                sectionTitles={garden.profile.sectionTitles}
                 isAdmin={isAdmin}
                 onCreateTravel={handleCreateTravel}
+                onUpdateTravel={handleUpdateTravel}
                 onDeleteTravel={handleDeleteTravel}
                 onOpenArticle={handleOpenArticle}
                 onOpenGallery={() => navigateTo('gallery')}
@@ -557,8 +587,10 @@ export default function App() {
               <CollectionsView
                 collections={garden.collections}
                 categories={garden.customCategories.collectionCategories}
+                sectionTitles={garden.profile.sectionTitles}
                 isAdmin={isAdmin}
                 onCreateCollection={handleCreateCollection}
+                onUpdateCollection={handleUpdateCollection}
                 onDeleteCollection={handleDeleteCollection}
               />
             )}
@@ -597,6 +629,7 @@ export default function App() {
                 onDeleteArticle={handleDeleteArticle}
                 onDeleteMoment={handleDeleteMoment}
                 onUpdateProfile={handleUpdateProfile}
+                onUpdateCategories={handleUpdateCategories}
                 onRestoreBackupSuccess={(restored) => setGarden(restored)}
               />
             )}
@@ -607,13 +640,23 @@ export default function App() {
       {/* Organic Footer */}
       <footer className="mt-20 border-t border-[var(--border-organic)] bg-[var(--bg-elevated)]/60 py-10">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-[var(--text-muted)]">
-          <div className="flex items-center gap-2">
-            <Leaf className="w-4 h-4 text-[#687a56]" />
+          <div className="flex flex-wrap items-center gap-2 text-center sm:text-left">
+            <Leaf className="w-4 h-4 text-[#687a56] shrink-0" />
             <span className="font-serif-editorial font-medium text-[var(--text-primary)]">
               {garden.profile.gardenName}
             </span>
-            <span>·</span>
-            <span>{garden.profile.signature.slice(0, 26)}</span>
+            {(() => {
+              const footerCopy =
+                garden.profile.footerText !== undefined
+                  ? garden.profile.footerText
+                  : garden.profile.signature;
+              return footerCopy && footerCopy.trim() ? (
+                <>
+                  <span>·</span>
+                  <span>{footerCopy}</span>
+                </>
+              ) : null;
+            })()}
           </div>
 
           <div className="flex flex-wrap items-center gap-4">
@@ -637,7 +680,7 @@ export default function App() {
               onClick={() => navigateTo('admin')}
               className="hover:text-[var(--text-primary)] cursor-pointer"
             >
-              {isAdmin ? '后台与数据备份' : '园主入口'}
+              {isAdmin ? '站点自定义与后台' : '园主入口'}
             </button>
           </div>
         </div>

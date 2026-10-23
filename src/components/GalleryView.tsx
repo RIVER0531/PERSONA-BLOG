@@ -9,13 +9,15 @@ import {
   Lock,
   Trash2,
   MapPin,
+  Edit3,
 } from 'lucide-react';
-import type { Album, PhotoItem } from '../types/garden';
+import type { Album, PhotoItem, SiteSectionTitles } from '../types/garden';
 import { filterVisibleContent } from '../utils/gardenLogic';
 import { compressAndUploadImage } from '../utils/api';
 
 interface GalleryViewProps {
   albums: Album[];
+  sectionTitles?: SiteSectionTitles;
   isAdmin: boolean;
   onCreateAlbum: (album: Partial<Album>) => Promise<void>;
   onUpdateAlbum: (id: string, album: Partial<Album>) => Promise<void>;
@@ -24,6 +26,7 @@ interface GalleryViewProps {
 
 export const GalleryView: React.FC<GalleryViewProps> = ({
   albums,
+  sectionTitles,
   isAdmin,
   onCreateAlbum,
   onUpdateAlbum,
@@ -32,13 +35,15 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
   const visibleAlbums = filterVisibleContent(albums, isAdmin);
   const [selectedAlbumId, setSelectedAlbumId] = useState<string>('all');
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [editingAlbumId, setEditingAlbumId] = useState<string | null>(null);
   const [showUploadModal, setShowUploadModal] = useState(false);
 
-  // New album state
+  // Album form state
   const [newTitle, setNewTitle] = useState('');
   const [newDesc, setNewDesc] = useState('');
-  const [newCategory, setNewCategory] = useState('旅行摄影');
-  const [newLocation, setNewLocation] = useState('日本 · 京都');
+  const [newCategory, setNewCategory] = useState('');
+  const [newLocation, setNewLocation] = useState('');
+  const [newCoverImage, setNewCoverImage] = useState('');
   const [newStatus, setNewStatus] = useState<'public' | 'private'>('public');
 
   // Batch upload state
@@ -47,7 +52,7 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
   );
   const [photoTitle, setPhotoTitle] = useState('');
   const [photoCaption, setPhotoCaption] = useState('');
-  const [photoCamera, setPhotoCamera] = useState('Fujifilm X100VI');
+  const [photoCamera, setPhotoCamera] = useState('');
   const [uploadedUrls, setUploadedUrls] = useState<string[]>([]);
   const [isUploading, setIsUploading] = useState(false);
 
@@ -137,17 +142,33 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
   const handleCreateAlbumSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTitle.trim()) return;
-    await onCreateAlbum({
-      title: newTitle.trim(),
-      description: newDesc.trim(),
-      category: newCategory.trim(),
-      location: newLocation.trim(),
-      status: newStatus,
-      date: new Date().toISOString().slice(0, 10),
-      photos: [],
-    });
+    if (editingAlbumId) {
+      await onUpdateAlbum(editingAlbumId, {
+        title: newTitle.trim(),
+        description: newDesc.trim(),
+        category: newCategory.trim() || '摄影集',
+        location: newLocation.trim(),
+        coverImage: newCoverImage.trim() || undefined,
+        status: newStatus,
+      });
+    } else {
+      await onCreateAlbum({
+        title: newTitle.trim(),
+        description: newDesc.trim(),
+        category: newCategory.trim() || '摄影集',
+        location: newLocation.trim(),
+        coverImage: newCoverImage.trim() || undefined,
+        status: newStatus,
+        date: new Date().toISOString().slice(0, 10),
+        photos: [],
+      });
+    }
     setNewTitle('');
     setNewDesc('');
+    setNewCategory('');
+    setNewLocation('');
+    setNewCoverImage('');
+    setEditingAlbumId(null);
     setShowCreateModal(false);
   };
 
@@ -156,22 +177,32 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-8 border-b border-[var(--border-organic)]">
         <div>
-          <p className="text-xs uppercase tracking-widest text-[#687a56] mb-2">
-            Photography & Light Archive
-          </p>
           <h1 className="font-serif-editorial text-3xl sm:text-4xl font-semibold">
-            光影相册 · 胶片与自然切片
+            {sectionTitles?.galleryPageTitle || '光影相册 · 胶片与自然切片'}
           </h1>
-          <p className="text-sm text-[var(--text-muted)] mt-2 max-w-xl">
-            用定焦镜头与自然光线留存的四季影集。共 {visibleAlbums.length} 本相册，{flatPhotos.length} 帧画面。
-          </p>
+          {(sectionTitles?.galleryPageSubtitle ??
+            '用镜头与自然光线留存的四季影集。') !== '' && (
+            <p className="text-sm text-[var(--text-muted)] mt-2 max-w-xl">
+              {sectionTitles?.galleryPageSubtitle ??
+                '用镜头与自然光线留存的四季影集。'}
+            </p>
+          )}
         </div>
 
         {isAdmin && (
           <div className="flex flex-wrap items-center gap-3">
             <button
               type="button"
-              onClick={() => setShowCreateModal(true)}
+              onClick={() => {
+                setEditingAlbumId(null);
+                setNewTitle('');
+                setNewDesc('');
+                setNewCategory('');
+                setNewLocation('');
+                setNewCoverImage('');
+                setNewStatus('public');
+                setShowCreateModal(true);
+              }}
               className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-[var(--border-organic)] bg-[var(--bg-elevated)] text-xs font-medium hover:border-[#8b9d77] cursor-pointer"
             >
               <Plus className="w-4 h-4 text-[#687a56]" />
@@ -253,17 +284,37 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
               <div className="pt-3 mt-3 border-t border-[var(--border-organic)] flex items-center justify-between text-xs text-[var(--text-muted)]">
                 <span>{album.photos.length} 张照片 · {album.date}</span>
                 {isAdmin && (
-                  <button
-                    type="button"
-                    aria-label={`删除相册 ${album.title}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onDeleteAlbum(album.id);
-                    }}
-                    className="hover:text-[#b55346] p-1"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      aria-label={`编辑相册 ${album.title}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditingAlbumId(album.id);
+                        setNewTitle(album.title);
+                        setNewDesc(album.description);
+                        setNewCategory(album.category);
+                        setNewLocation(album.location);
+                        setNewCoverImage(album.coverImage);
+                        setNewStatus(album.status);
+                        setShowCreateModal(true);
+                      }}
+                      className="hover:text-[#687a56] p-1 cursor-pointer"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`删除相册 ${album.title}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDeleteAlbum(album.id);
+                      }}
+                      className="hover:text-[#b55346] p-1 cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 )}
               </div>
             </div>
@@ -430,7 +481,9 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
             onSubmit={handleCreateAlbumSubmit}
             className="w-full max-w-md rounded-2xl bg-[var(--bg-elevated)] border border-[var(--border-organic)] p-6 space-y-4"
           >
-            <h3 className="font-serif-editorial text-xl font-semibold">新建摄影相册</h3>
+            <h3 className="font-serif-editorial text-xl font-semibold">
+              {editingAlbumId ? '编辑相册信息' : '新建摄影相册'}
+            </h3>
             <div>
               <label className="block text-xs text-[var(--text-muted)] mb-1">相册名称</label>
               <input
@@ -438,12 +491,12 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
                 required
                 value={newTitle}
                 onChange={(e) => setNewTitle(e.target.value)}
-                placeholder="例如：杭州西湖冬雪"
+                placeholder="例如：冬雪漫行"
                 className="w-full text-sm px-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-organic)]"
               />
             </div>
             <div>
-              <label className="block text-xs text-[var(--text-muted)] mb-1">相册描述</label>
+              <label className="block text-xs text-[var(--text-muted)] mb-1">相册描述（可留空）</label>
               <textarea
                 rows={2}
                 value={newDesc}
@@ -459,18 +512,30 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
                   type="text"
                   value={newCategory}
                   onChange={(e) => setNewCategory(e.target.value)}
+                  placeholder="例如：日常静物"
                   className="w-full text-xs px-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-organic)]"
                 />
               </div>
               <div>
-                <label className="block text-xs text-[var(--text-muted)] mb-1">拍摄地点</label>
+                <label className="block text-xs text-[var(--text-muted)] mb-1">拍摄地点（可留空）</label>
                 <input
                   type="text"
                   value={newLocation}
                   onChange={(e) => setNewLocation(e.target.value)}
+                  placeholder="例如：书房 / 旅途"
                   className="w-full text-xs px-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-organic)]"
                 />
               </div>
+            </div>
+            <div>
+              <label className="block text-xs text-[var(--text-muted)] mb-1">相册封面图片 URL（可留空自动取首张）</label>
+              <input
+                type="text"
+                value={newCoverImage}
+                onChange={(e) => setNewCoverImage(e.target.value)}
+                placeholder="https://... 或 /uploads/..."
+                className="w-full text-xs px-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-organic)]"
+              />
             </div>
             <div>
               <label className="block text-xs text-[var(--text-muted)] mb-1">可见权限</label>
@@ -486,7 +551,10 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
             <div className="flex justify-end gap-2 pt-2">
               <button
                 type="button"
-                onClick={() => setShowCreateModal(false)}
+                onClick={() => {
+                  setEditingAlbumId(null);
+                  setShowCreateModal(false);
+                }}
                 className="px-4 py-2 rounded-xl text-xs border border-[var(--border-organic)] cursor-pointer"
               >
                 取消
@@ -495,7 +563,7 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
                 type="submit"
                 className="px-4 py-2 rounded-xl text-xs bg-[#687a56] text-[#faf6f1] cursor-pointer"
               >
-                创建相册
+                {editingAlbumId ? '保存修改' : '创建相册'}
               </button>
             </div>
           </form>

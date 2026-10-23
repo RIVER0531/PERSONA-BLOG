@@ -10,8 +10,9 @@ import {
   Globe,
   Upload,
   Lock,
+  Edit3,
 } from 'lucide-react';
-import type { CollectionItem } from '../types/garden';
+import type { CollectionItem, SiteSectionTitles } from '../types/garden';
 import { filterVisibleContent } from '../utils/gardenLogic';
 import { compressAndUploadImage } from '../utils/api';
 
@@ -19,7 +20,12 @@ interface CollectionsViewProps {
   collections: CollectionItem[];
   categories: Array<{ id: string; label: string }>;
   isAdmin: boolean;
+  sectionTitles?: SiteSectionTitles;
   onCreateCollection: (item: Partial<CollectionItem>) => Promise<void>;
+  onUpdateCollection?: (
+    id: string,
+    item: Partial<CollectionItem>
+  ) => Promise<void>;
   onDeleteCollection: (id: string) => Promise<void>;
 }
 
@@ -27,14 +33,23 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({
   collections,
   categories,
   isAdmin,
+  sectionTitles,
   onCreateCollection,
+  onUpdateCollection,
   onDeleteCollection,
 }) => {
   const visibleItems = filterVisibleContent(collections, isAdmin);
   const [selectedCat, setSelectedCat] = useState<string>('all');
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
 
-  // Add item form state
+  const pageTitle =
+    sectionTitles?.collectionsPageTitle ?? '器物与精神食粮 · 兴趣收藏室';
+  const pageSubtitle =
+    sectionTitles?.collectionsPageSubtitle ??
+    '存放陪伴日常创作的数码器物、深夜重温的电影、案头书册与黑胶唱片。';
+
+  // Form state
   const [title, setTitle] = useState('');
   const [creator, setCreator] = useState('');
   const [category, setCategory] = useState(categories[0]?.id || 'gear');
@@ -46,7 +61,7 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({
   const [experienceNote, setExperienceNote] = useState('');
   const [specsOrMeta, setSpecsOrMeta] = useState('');
   const [externalLink, setExternalLink] = useState('');
-  const [tagsInput, setTagsInput] = useState('偏爱，长期主义');
+  const [tagsInput, setTagsInput] = useState('');
   const [status, setStatus] = useState<'public' | 'private'>('public');
   const [isUploading, setIsUploading] = useState(false);
 
@@ -56,6 +71,42 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({
     selectedCat === 'all'
       ? visibleItems
       : visibleItems.filter((item) => item.category === selectedCat);
+
+  const openCreateModal = () => {
+    setEditingItemId(null);
+    setTitle('');
+    setCreator('');
+    setCategory(categories[0]?.id || 'gear');
+    setCustomCatId('');
+    setCustomCatLabel('');
+    setCoverImage('');
+    setRating(5);
+    setReview('');
+    setExperienceNote('');
+    setSpecsOrMeta('');
+    setExternalLink('');
+    setTagsInput('');
+    setStatus('public');
+    setShowAddModal(true);
+  };
+
+  const openEditModal = (item: CollectionItem) => {
+    setEditingItemId(item.id);
+    setTitle(item.title);
+    setCreator(item.creator);
+    setCategory(item.category);
+    setCustomCatId('');
+    setCustomCatLabel(item.categoryLabel);
+    setCoverImage(item.coverImage);
+    setRating(item.rating);
+    setReview(item.review);
+    setExperienceNote(item.experienceNote || '');
+    setSpecsOrMeta(item.specsOrMeta || '');
+    setExternalLink(item.externalLink || '');
+    setTagsInput(item.tags.join('，'));
+    setStatus(item.status === 'private' ? 'private' : 'public');
+    setShowAddModal(true);
+  };
 
   const handleCoverUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -68,7 +119,7 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({
     }
   };
 
-  const handleCreateSubmit = async (e: React.FormEvent) => {
+  const handleSaveSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
     const finalCatId = customCatId.trim() || category;
@@ -76,7 +127,7 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({
       categories.find((c) => c.id === category)?.label || '好物收藏';
     const finalCatLabel = customCatLabel.trim() || foundLabel;
 
-    await onCreateCollection({
+    const payload: Partial<CollectionItem> = {
       title: title.trim(),
       creator: creator.trim(),
       category: finalCatId,
@@ -93,43 +144,45 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({
         .split(/[,，、\s]+/)
         .map((t) => t.trim())
         .filter(Boolean),
-      recordedDate: new Date().toISOString().slice(0, 10),
       status,
       favorite: rating === 5,
-    });
+    };
 
-    setTitle('');
-    setCreator('');
-    setReview('');
-    setExperienceNote('');
-    setSpecsOrMeta('');
-    setCustomCatId('');
-    setCustomCatLabel('');
+    if (editingItemId && onUpdateCollection) {
+      await onUpdateCollection(editingItemId, payload);
+    } else {
+      await onCreateCollection({
+        ...payload,
+        recordedDate: new Date().toISOString().slice(0, 10),
+      });
+    }
+
     setShowAddModal(false);
+    setEditingItemId(null);
   };
 
-  const renderStars = (score: number) => '★'.repeat(score) + '☆'.repeat(Math.max(0, 5 - score));
+  const renderStars = (score: number) =>
+    '★'.repeat(score) + '☆'.repeat(Math.max(0, 5 - score));
 
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 sm:py-12 space-y-10">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-8 border-b border-[var(--border-organic)]">
         <div>
-          <p className="text-xs uppercase tracking-widest text-[#687a56] mb-2">
-            Curated Cabinet of Curiosities
-          </p>
           <h1 className="font-serif-editorial text-3xl sm:text-4xl font-semibold">
-            器物与精神食粮 · 兴趣收藏室
+            {pageTitle}
           </h1>
-          <p className="text-sm text-[var(--text-muted)] mt-2 max-w-xl">
-            存放陪伴我日常创作的数码器物、深夜重温的电影、案头书册与黑胶唱片。
-          </p>
+          {pageSubtitle && (
+            <p className="text-sm text-[var(--text-muted)] mt-2 max-w-xl">
+              {pageSubtitle}
+            </p>
+          )}
         </div>
 
         {isAdmin && (
           <button
             type="button"
-            onClick={() => setShowAddModal(true)}
+            onClick={openCreateModal}
             className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#687a56] text-[#faf6f1] text-xs font-medium hover:bg-[#586947] cursor-pointer"
           >
             <Plus className="w-4 h-4" />
@@ -182,6 +235,29 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({
       {/* Category-Adapted Editorial Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {filteredItems.map((item) => {
+          const renderAdminButtons = () =>
+            isAdmin ? (
+              <div className="flex items-center gap-2">
+                {onUpdateCollection && (
+                  <button
+                    type="button"
+                    onClick={() => openEditModal(item)}
+                    className="text-xs text-[#687a56] hover:underline flex items-center gap-1 cursor-pointer"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" />
+                    <span>编辑</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => onDeleteCollection(item.id)}
+                  className="hover:text-[#b55346] cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ) : null;
+
           // 1. MUSIC / VINYL RECORD STYLE
           if (item.category === 'music') {
             return (
@@ -190,7 +266,6 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({
                 className="p-6 rounded-2xl bg-[var(--bg-elevated)] border border-[var(--border-organic)] flex flex-col sm:flex-row gap-6 items-center sm:items-start"
               >
                 <div className="relative w-36 h-36 shrink-0">
-                  {/* Vinyl disc peeking out */}
                   <div className="absolute -right-4 top-2 w-32 h-32 rounded-full bg-[#24201d] border-4 border-[#3a332c] flex items-center justify-center">
                     <div className="w-10 h-10 rounded-full bg-[#d4a373]/80" />
                   </div>
@@ -218,7 +293,9 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({
                   </h3>
 
                   {item.specsOrMeta && (
-                    <p className="text-xs text-[var(--text-muted)]">{item.specsOrMeta}</p>
+                    <p className="text-xs text-[var(--text-muted)]">
+                      {item.specsOrMeta}
+                    </p>
                   )}
 
                   <p className="text-sm leading-relaxed">{item.review}</p>
@@ -231,15 +308,7 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({
 
                   <div className="pt-2 flex items-center justify-between text-xs text-[var(--text-muted)]">
                     <span>收录于 {item.recordedDate}</span>
-                    {isAdmin && (
-                      <button
-                        type="button"
-                        onClick={() => onDeleteCollection(item.id)}
-                        className="hover:text-[#b55346] cursor-pointer"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    )}
+                    {renderAdminButtons()}
                   </div>
                 </div>
               </div>
@@ -296,15 +365,7 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({
 
                   <div className="pt-2 flex items-center justify-between text-xs text-[var(--text-muted)]">
                     <span>{item.tags.map((t) => `#${t}`).join('  ')}</span>
-                    {isAdmin && (
-                      <button
-                        type="button"
-                        onClick={() => onDeleteCollection(item.id)}
-                        className="hover:text-[#b55346] cursor-pointer"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    )}
+                    {renderAdminButtons()}
                   </div>
                 </div>
               </div>
@@ -368,7 +429,8 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({
 
               <div className="px-6 pb-5 pt-3 border-t border-[var(--border-organic)] flex items-center justify-between text-xs text-[var(--text-muted)]">
                 <span>
-                  {item.tags.map((t) => `#${t}`).join('  ')} · {item.recordedDate}
+                  {item.tags.map((t) => `#${t}`).join('  ')} ·{' '}
+                  {item.recordedDate}
                 </span>
 
                 <div className="flex items-center gap-3">
@@ -383,15 +445,7 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({
                       <ExternalLink className="w-3.5 h-3.5" />
                     </a>
                   )}
-                  {isAdmin && (
-                    <button
-                      type="button"
-                      onClick={() => onDeleteCollection(item.id)}
-                      className="hover:text-[#b55346] cursor-pointer"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  )}
+                  {renderAdminButtons()}
                 </div>
               </div>
             </div>
@@ -399,25 +453,27 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({
         })}
       </div>
 
-      {/* Add Collection Modal */}
+      {/* Add / Edit Collection Modal */}
       {showAddModal && (
         <div
           role="dialog"
           aria-modal="true"
-          aria-label="新增收藏条目"
+          aria-label={editingItemId ? '编辑收藏条目' : '新增收藏条目'}
           className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4 overflow-y-auto"
         >
           <form
-            onSubmit={handleCreateSubmit}
+            onSubmit={handleSaveSubmit}
             className="w-full max-w-lg rounded-2xl bg-[var(--bg-elevated)] border border-[var(--border-organic)] p-6 space-y-4 my-8"
           >
             <h3 className="font-serif-editorial text-xl font-semibold">
-              新增兴趣收藏条目
+              {editingItemId ? '编辑兴趣收藏条目' : '新增兴趣收藏条目'}
             </h3>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs text-[var(--text-muted)] mb-1">藏品名称</label>
+                <label className="block text-xs text-[var(--text-muted)] mb-1">
+                  藏品名称
+                </label>
                 <input
                   type="text"
                   required
@@ -435,7 +491,7 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({
                   type="text"
                   value={creator}
                   onChange={(e) => setCreator(e.target.value)}
-                  placeholder="例如：高村光太郎"
+                  placeholder="选填"
                   className="w-full text-xs px-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-organic)]"
                 />
               </div>
@@ -443,7 +499,9 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
-                <label className="block text-xs text-[var(--text-muted)] mb-1">选择现有分类</label>
+                <label className="block text-xs text-[var(--text-muted)] mb-1">
+                  选择现有分类
+                </label>
                 <select
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
@@ -484,7 +542,9 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs text-[var(--text-muted)] mb-1">喜爱评分 (1-5星)</label>
+                <label className="block text-xs text-[var(--text-muted)] mb-1">
+                  喜爱评分 (1-5星)
+                </label>
                 <select
                   value={rating}
                   onChange={(e) => setRating(Number(e.target.value))}
@@ -496,7 +556,9 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({
                 </select>
               </div>
               <div>
-                <label className="block text-xs text-[var(--text-muted)] mb-1">规格 / 年份说明</label>
+                <label className="block text-xs text-[var(--text-muted)] mb-1">
+                  规格 / 年份说明
+                </label>
                 <input
                   type="text"
                   value={specsOrMeta}
@@ -508,7 +570,9 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({
             </div>
 
             <div>
-              <label className="block text-xs text-[var(--text-muted)] mb-1">评价与体会</label>
+              <label className="block text-xs text-[var(--text-muted)] mb-1">
+                评价与体会
+              </label>
               <textarea
                 rows={3}
                 value={review}
@@ -519,7 +583,9 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({
             </div>
 
             <div>
-              <label className="block text-xs text-[var(--text-muted)] mb-1">长期体验备注 / 批注</label>
+              <label className="block text-xs text-[var(--text-muted)] mb-1">
+                长期体验备注 / 批注
+              </label>
               <input
                 type="text"
                 value={experienceNote}
@@ -529,9 +595,24 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({
               />
             </div>
 
+            <div>
+              <label className="block text-xs text-[var(--text-muted)] mb-1">
+                标签（用逗号分隔）
+              </label>
+              <input
+                type="text"
+                value={tagsInput}
+                onChange={(e) => setTagsInput(e.target.value)}
+                placeholder="例如：偏爱，长期主义"
+                className="w-full text-xs px-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-organic)]"
+              />
+            </div>
+
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs text-[var(--text-muted)] mb-1">外部链接（选填）</label>
+                <label className="block text-xs text-[var(--text-muted)] mb-1">
+                  外部链接（选填）
+                </label>
                 <input
                   type="url"
                   value={externalLink}
@@ -541,10 +622,14 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({
                 />
               </div>
               <div>
-                <label className="block text-xs text-[var(--text-muted)] mb-1">可见状态</label>
+                <label className="block text-xs text-[var(--text-muted)] mb-1">
+                  可见状态
+                </label>
                 <select
                   value={status}
-                  onChange={(e) => setStatus(e.target.value as 'public' | 'private')}
+                  onChange={(e) =>
+                    setStatus(e.target.value as 'public' | 'private')
+                  }
                   className="w-full text-xs px-3 py-2 rounded-xl bg-[var(--bg-primary)] border border-[var(--border-organic)]"
                 >
                   <option value="public">公开展示</option>
@@ -560,7 +645,13 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-[var(--border-organic)] text-xs cursor-pointer"
               >
                 <Upload className="w-3.5 h-3.5 text-[#687a56]" />
-                <span>{isUploading ? '上传中…' : coverImage ? '已上传封面图' : '上传藏品图片'}</span>
+                <span>
+                  {isUploading
+                    ? '上传中…'
+                    : coverImage
+                    ? '已上传封面图'
+                    : '上传藏品图片'}
+                </span>
               </button>
               <input
                 ref={fileInputRef}
@@ -573,7 +664,10 @@ export const CollectionsView: React.FC<CollectionsViewProps> = ({
               <div className="flex gap-2">
                 <button
                   type="button"
-                  onClick={() => setShowAddModal(false)}
+                  onClick={() => {
+                    setShowAddModal(false);
+                    setEditingItemId(null);
+                  }}
                   className="px-4 py-2 rounded-xl text-xs border border-[var(--border-organic)] cursor-pointer"
                 >
                   取消

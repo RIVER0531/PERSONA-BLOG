@@ -106,6 +106,19 @@ export async function updateSiteProfile(
   return data.profile;
 }
 
+export async function updateCustomCategoriesApi(
+  customCategories: Partial<GardenDatabase['customCategories']>
+): Promise<GardenDatabase['customCategories']> {
+  const res = await fetch('/api/categories', {
+    method: 'PUT',
+    headers: authHeaders(),
+    body: JSON.stringify(customCategories),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || '保存自定义分类失败');
+  return data.customCategories;
+}
+
 export async function createArticleApi(article: Partial<Article>): Promise<Article> {
   const res = await fetch('/api/articles', {
     method: 'POST',
@@ -448,3 +461,39 @@ export async function restoreZipBackupFile(
   if (!res.ok) throw new Error(data.error || '恢复备份失败');
   return data;
 }
+
+export interface AgentApiKeyInfo {
+  apiKey: string;
+  productionUrl: string;
+  currentUrl: string;
+  openApiUrl: string;
+  currentOpenApiUrl: string;
+  mcpUrl?: string;
+  sseUrl?: string;
+  systemPrompt: string;
+}
+
+export async function fetchAgentApiKeyInfo(): Promise<AgentApiKeyInfo> {
+  const res = await fetch('/api/auth/apikey', {
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error('获取 AI 接入凭证失败');
+  return res.json();
+}
+
+export async function regenerateAgentApiKey(): Promise<{
+  apiKey: string;
+  mcpUrl?: string;
+  sseUrl?: string;
+  message: string;
+  systemPrompt: string;
+}> {
+  const res = await fetch('/api/auth/apikey/regenerate', {
+    method: 'POST',
+    headers: authHeaders(),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || '重置 AI API Key 失败');
+  return data;
+}
+

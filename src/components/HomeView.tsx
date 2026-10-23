@@ -87,7 +87,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
           </svg>
 
           <div className="space-y-5 relative z-10">
-            {profile.homeModules.showAlmanac && (
+            {profile.homeModules.showAlmanac && profile.seasonNote && profile.seasonNote.trim() && (
               <div className="inline-flex items-center gap-2 text-xs text-[#687a56] font-medium">
                 <span className="w-2 h-2 rounded-full bg-[#687a56]" />
                 <span>{profile.seasonNote}</span>
@@ -98,13 +98,17 @@ export const HomeView: React.FC<HomeViewProps> = ({
               {profile.heroTitle}
             </h1>
 
-            <p className="text-sm sm:text-base text-[var(--text-body)] leading-relaxed max-w-2xl">
-              {profile.heroIntro}
-            </p>
+            {profile.heroIntro && profile.heroIntro.trim() && (
+              <p className="text-sm sm:text-base text-[var(--text-body)] leading-relaxed max-w-2xl">
+                {profile.heroIntro}
+              </p>
+            )}
 
-            <blockquote className="font-serif-editorial text-sm italic text-[var(--text-muted)] border-l-2 border-[#d4a373] pl-3.5 py-0.5">
-              {profile.heroQuote}
-            </blockquote>
+            {profile.heroQuote && profile.heroQuote.trim() && (
+              <blockquote className="font-serif-editorial text-sm italic text-[var(--text-muted)] border-l-2 border-[#d4a373] pl-3.5 py-0.5">
+                {profile.heroQuote}
+              </blockquote>
+            )}
           </div>
 
           <div className="pt-8 mt-6 border-t border-[var(--border-organic)] flex flex-wrap items-center gap-3 relative z-10">
@@ -113,28 +117,39 @@ export const HomeView: React.FC<HomeViewProps> = ({
               onClick={() => onNavigate('articles')}
               className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#687a56] text-[#faf6f1] text-xs sm:text-sm font-medium hover:bg-[#586947] transition-colors cursor-pointer"
             >
-              <span>翻阅长文手记</span>
+              <span>翻阅文章</span>
               <ArrowRight className="w-4 h-4" />
             </button>
 
-            <button
-              type="button"
-              onClick={handleRandomWalk}
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-[var(--border-organic)] bg-[var(--bg-primary)] text-xs sm:text-sm font-medium hover:border-[#8b9d77] transition-colors cursor-pointer"
-            >
-              <Shuffle className="w-4 h-4 text-[#687a56]" />
-              <span>随机漫步一篇</span>
-            </button>
-
-            {isAdmin && (
+            {visibleArticles.length > 0 && (
               <button
                 type="button"
-                onClick={() => onNavigate('editor')}
-                className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-[#d4a373] text-xs sm:text-sm font-medium hover:bg-[#d4a373]/15 transition-colors cursor-pointer"
+                onClick={handleRandomWalk}
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-[var(--border-organic)] bg-[var(--bg-primary)] text-xs sm:text-sm font-medium hover:border-[#8b9d77] transition-colors cursor-pointer"
               >
-                <Feather className="w-4 h-4 text-[#d4a373]" />
-                <span>提笔写新文章</span>
+                <Shuffle className="w-4 h-4 text-[#687a56]" />
+                <span>随机漫步一篇</span>
               </button>
+            )}
+
+            {isAdmin && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => onNavigate('editor')}
+                  className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-[#d4a373] text-xs sm:text-sm font-medium hover:bg-[#d4a373]/15 transition-colors cursor-pointer"
+                >
+                  <Feather className="w-4 h-4 text-[#d4a373]" />
+                  <span>写新文章</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onNavigate('admin')}
+                  className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-[var(--border-organic)] bg-[var(--bg-primary)] text-xs sm:text-sm font-medium hover:border-[#8b9d77] transition-colors cursor-pointer"
+                >
+                  <span>自定义全站文字与板块</span>
+                </button>
+              </>
             )}
           </div>
         </div>
@@ -143,51 +158,67 @@ export const HomeView: React.FC<HomeViewProps> = ({
         <div className="lg:col-span-5 p-7 sm:p-8 rounded-3xl bg-[var(--bg-elevated)] border border-[var(--border-organic)] flex flex-col justify-between space-y-6">
           <div className="space-y-4">
             <div className="flex items-center gap-4">
-              <img
-                src={profile.avatar}
-                alt={profile.ownerName}
-                className="w-16 h-16 rounded-full object-cover border-2 border-[#8b9d77]"
-              />
+              {profile.avatar && (
+                <img
+                  src={profile.avatar}
+                  alt={profile.ownerName}
+                  className="w-16 h-16 rounded-full object-cover border-2 border-[#8b9d77]"
+                />
+              )}
               <div>
-                <span className="text-[11px] uppercase tracking-wider text-[var(--text-muted)]">
-                  Garden Keeper · 园主名片
-                </span>
+                {(profile.sectionTitles?.ownerCardBadge ?? '园主名片') !== '' && (
+                  <span className="text-[11px] uppercase tracking-wider text-[var(--text-muted)]">
+                    {profile.sectionTitles?.ownerCardBadge ?? '园主名片'}
+                  </span>
+                )}
                 <h2 className="font-serif-editorial text-2xl font-semibold">
                   {profile.ownerName}
                 </h2>
-                <p className="text-xs text-[var(--text-muted)]">{profile.ownerTitle}</p>
+                {profile.ownerTitle && (
+                  <p className="text-xs text-[var(--text-muted)]">{profile.ownerTitle}</p>
+                )}
               </div>
             </div>
 
-            <p className="text-xs sm:text-sm text-[var(--text-body)] leading-relaxed">
-              {profile.bio}
-            </p>
+            {profile.bio && (
+              <p className="text-xs sm:text-sm text-[var(--text-body)] leading-relaxed">
+                {profile.bio}
+              </p>
+            )}
           </div>
 
-          <div className="p-4 rounded-2xl bg-[var(--bg-primary)] border border-[var(--border-organic)] space-y-2.5 text-xs">
-            <div className="flex items-center justify-between">
-              <span className="text-[var(--text-muted)] flex items-center gap-1.5">
-                <MapPin className="w-3.5 h-3.5 text-[#687a56]" /> 常居坐标
-              </span>
-              <span className="font-medium">{profile.currentLocation}</span>
+          {(profile.currentLocation || profile.currentReading || profile.currentListening) && (
+            <div className="p-4 rounded-2xl bg-[var(--bg-primary)] border border-[var(--border-organic)] space-y-2.5 text-xs">
+              {profile.currentLocation && (
+                <div className="flex items-center justify-between">
+                  <span className="text-[var(--text-muted)] flex items-center gap-1.5">
+                    <MapPin className="w-3.5 h-3.5 text-[#687a56]" /> 常居坐标
+                  </span>
+                  <span className="font-medium">{profile.currentLocation}</span>
+                </div>
+              )}
+              {profile.currentReading && (
+                <div className="flex items-center justify-between">
+                  <span className="text-[var(--text-muted)] flex items-center gap-1.5">
+                    <BookOpen className="w-3.5 h-3.5 text-[#d4a373]" /> 案头在读
+                  </span>
+                  <span className="font-medium truncate max-w-[190px]">
+                    {profile.currentReading}
+                  </span>
+                </div>
+              )}
+              {profile.currentListening && (
+                <div className="flex items-center justify-between">
+                  <span className="text-[var(--text-muted)] flex items-center gap-1.5">
+                    <Music className="w-3.5 h-3.5 text-[#687a56]" /> 循环旋律
+                  </span>
+                  <span className="font-medium truncate max-w-[190px]">
+                    {profile.currentListening}
+                  </span>
+                </div>
+              )}
             </div>
-            <div className="flex items-center justify-between">
-              <span className="text-[var(--text-muted)] flex items-center gap-1.5">
-                <BookOpen className="w-3.5 h-3.5 text-[#d4a373]" /> 案头在读
-              </span>
-              <span className="font-medium truncate max-w-[190px]">
-                {profile.currentReading}
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-[var(--text-muted)] flex items-center gap-1.5">
-                <Music className="w-3.5 h-3.5 text-[#687a56]" /> 循环旋律
-              </span>
-              <span className="font-medium truncate max-w-[190px]">
-                {profile.currentListening}
-              </span>
-            </div>
-          </div>
+          )}
 
           <div className="flex items-center justify-between text-xs pt-1">
             <span className="text-[var(--text-muted)]">
@@ -198,7 +229,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
               onClick={() => onNavigate('about')}
               className="text-[#687a56] font-medium hover:underline cursor-pointer"
             >
-              关于园主 →
+              关于我 →
             </button>
           </div>
         </div>
@@ -209,11 +240,8 @@ export const HomeView: React.FC<HomeViewProps> = ({
         <section className="space-y-6">
           <div className="flex items-end justify-between border-b border-[var(--border-organic)] pb-4">
             <div>
-              <span className="text-xs uppercase tracking-widest text-[#687a56]">
-                Selected Essays
-              </span>
-              <h2 className="font-serif-editorial text-2xl sm:text-3xl font-semibold mt-0.5">
-                精选长文手记
+              <h2 className="font-serif-editorial text-2xl sm:text-3xl font-semibold">
+                {profile.sectionTitles?.homeArticlesTitle || '精选长文手记'}
               </h2>
             </div>
             <button
@@ -234,14 +262,16 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 className="lg:col-span-7 group rounded-2xl bg-[var(--bg-elevated)] border border-[var(--border-organic)] hover:border-[#8b9d77] transition-all overflow-hidden cursor-pointer flex flex-col justify-between"
               >
                 <div>
-                  <div className="h-64 sm:h-72 overflow-hidden">
-                    <img
-                      src={featuredArticles[0].coverImage}
-                      alt={featuredArticles[0].title}
-                      loading="lazy"
-                      className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-500"
-                    />
-                  </div>
+                  {featuredArticles[0].coverImage && (
+                    <div className="h-64 sm:h-72 overflow-hidden">
+                      <img
+                        src={featuredArticles[0].coverImage}
+                        alt={featuredArticles[0].title}
+                        loading="lazy"
+                        className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-500"
+                      />
+                    </div>
+                  )}
                   <div className="p-6 sm:p-8 space-y-3">
                     <div className="text-xs text-[var(--text-muted)] flex flex-wrap items-center gap-x-2">
                       {featuredArticles[0].isPinned && (
@@ -305,7 +335,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                   </div>
 
                   <div className="pt-4 mt-4 border-t border-[var(--border-organic)] flex items-center justify-between text-xs text-[var(--text-muted)]">
-                    <span>{art.location || '栖迟书房'}</span>
+                    <span>{art.location || profile.currentLocation || ''}</span>
                     <span className="text-[#687a56] font-medium">阅读全文 →</span>
                   </div>
                 </article>
@@ -316,16 +346,23 @@ export const HomeView: React.FC<HomeViewProps> = ({
       )}
 
       {/* 3. MOMENTS STREAM & TRAVEL FOOTPRINTS SPLIT SECTION */}
-      {(profile.homeModules.showMoments || profile.homeModules.showTravel) && (
+      {((profile.homeModules.showMoments && recentMoments.length > 0) ||
+        (profile.homeModules.showTravel && recentTravels.length > 0)) && (
         <section className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          {/* Recent Moments (7 cols) */}
-          {profile.homeModules.showMoments && (
-            <div className="lg:col-span-7 space-y-5">
+          {/* Recent Moments */}
+          {profile.homeModules.showMoments && recentMoments.length > 0 && (
+            <div
+              className={`${
+                profile.homeModules.showTravel && recentTravels.length > 0
+                  ? 'lg:col-span-7'
+                  : 'lg:col-span-12'
+              } space-y-5`}
+            >
               <div className="flex items-end justify-between border-b border-[var(--border-organic)] pb-3">
                 <div className="flex items-center gap-2">
                   <Sparkles className="w-4 h-4 text-[#d4a373]" />
                   <h2 className="font-serif-editorial text-2xl font-semibold">
-                    吉光片羽 · 最近生活瞬间
+                    {profile.sectionTitles?.homeMomentsTitle || '吉光片羽 · 最近生活瞬间'}
                   </h2>
                 </div>
                 <button
@@ -356,14 +393,20 @@ export const HomeView: React.FC<HomeViewProps> = ({
             </div>
           )}
 
-          {/* Travel Footprints Preview (5 cols) */}
-          {profile.homeModules.showTravel && (
-            <div className="lg:col-span-5 space-y-5">
+          {/* Travel Footprints Preview */}
+          {profile.homeModules.showTravel && recentTravels.length > 0 && (
+            <div
+              className={`${
+                profile.homeModules.showMoments && recentMoments.length > 0
+                  ? 'lg:col-span-5'
+                  : 'lg:col-span-12'
+              } space-y-5`}
+            >
               <div className="flex items-end justify-between border-b border-[var(--border-organic)] pb-3">
                 <div className="flex items-center gap-2">
                   <Compass className="w-4 h-4 text-[#687a56]" />
                   <h2 className="font-serif-editorial text-2xl font-semibold">
-                    远行足迹 · 山海手卷
+                    {profile.sectionTitles?.homeTravelTitle || '远行足迹 · 山海手卷'}
                   </h2>
                 </div>
                 <button
@@ -414,7 +457,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
             <div className="flex items-center gap-2">
               <Camera className="w-4 h-4 text-[#687a56]" />
               <h2 className="font-serif-editorial text-2xl sm:text-3xl font-semibold">
-                光影相册 · 四季定格
+                {profile.sectionTitles?.homeGalleryTitle || '光影相册 · 四季定格'}
               </h2>
             </div>
             <button
@@ -465,7 +508,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
             <div className="flex items-center gap-2">
               <Bookmark className="w-4 h-4 text-[#d4a373]" />
               <h2 className="font-serif-editorial text-2xl sm:text-3xl font-semibold">
-                器物与书影 · 兴趣收藏精选
+                {profile.sectionTitles?.homeCollectionsTitle || '器物与书影 · 兴趣收藏精选'}
               </h2>
             </div>
             <button

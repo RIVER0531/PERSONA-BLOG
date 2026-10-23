@@ -81,15 +81,17 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
     <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8 sm:py-12 space-y-10">
       {/* Header */}
       <div className="pb-8 border-b border-[var(--border-organic)]">
-        <p className="text-xs uppercase tracking-widest text-[#687a56] mb-2">
-          Chronological Life Archive
-        </p>
         <h1 className="font-serif-editorial text-3xl sm:text-4xl font-semibold">
-          岁月年轮 · 全站记忆时间线
+          {garden.profile.sectionTitles?.timelinePageTitle ??
+            '岁月年轮 · 全站记忆时间线'}
         </h1>
-        <p className="text-sm text-[var(--text-muted)] mt-2 max-w-2xl">
-          自动汇聚每一篇长文手记、日常瞬间、远行足迹、相册与收藏。多年以后重返此处，依然能清晰看见当时的自己走过了哪些地方、想过什么问题。
-        </p>
+        {(garden.profile.sectionTitles?.timelinePageSubtitle ??
+          '自动汇聚每一篇长文手记、日常瞬间、远行足迹、相册与收藏。') && (
+          <p className="text-sm text-[var(--text-muted)] mt-2 max-w-2xl">
+            {garden.profile.sectionTitles?.timelinePageSubtitle ??
+              '自动汇聚每一篇长文手记、日常瞬间、远行足迹、相册与收藏。多年以后重返此处，依然能清晰看见当时的自己走过了哪些地方、想过什么问题。'}
+          </p>
+        )}
       </div>
 
       {/* Interactive Filter Controls */}

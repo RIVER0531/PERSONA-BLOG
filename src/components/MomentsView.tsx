@@ -9,12 +9,13 @@ import {
   Send,
   X,
 } from 'lucide-react';
-import type { Moment } from '../types/garden';
+import type { Moment, SiteSectionTitles } from '../types/garden';
 import { filterVisibleContent, formatEditorialDate } from '../utils/gardenLogic';
 import { compressAndUploadImage } from '../utils/api';
 
 interface MomentsViewProps {
   moments: Moment[];
+  sectionTitles?: SiteSectionTitles;
   isAdmin: boolean;
   onCreateMoment: (data: Partial<Moment>) => Promise<void>;
   onUpdateMoment: (id: string, data: Partial<Moment>) => Promise<void>;
@@ -23,16 +24,17 @@ interface MomentsViewProps {
 
 export const MomentsView: React.FC<MomentsViewProps> = ({
   moments,
+  sectionTitles,
   isAdmin,
   onCreateMoment,
   onUpdateMoment,
   onDeleteMoment,
 }) => {
   const [content, setContent] = useState('');
-  const [mood, setMood] = useState('平静欢喜');
-  const [weather, setWeather] = useState('秋晴 · 20℃');
-  const [location, setLocation] = useState('杭州 · 小院');
-  const [tagsText, setTagsText] = useState('日常，随想');
+  const [mood, setMood] = useState('');
+  const [weather, setWeather] = useState('');
+  const [location, setLocation] = useState('');
+  const [tagsText, setTagsText] = useState('');
   const [status, setStatus] = useState<'public' | 'private'>('public');
   const [images, setImages] = useState<string[]>([]);
   const [isUploading, setIsUploading] = useState(false);
@@ -93,15 +95,17 @@ export const MomentsView: React.FC<MomentsViewProps> = ({
     <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 sm:py-12 space-y-10">
       {/* Header */}
       <div className="pb-8 border-b border-[var(--border-organic)]">
-        <p className="text-xs uppercase tracking-widest text-[#687a56] mb-2">
-          Fleeting Moments & Daily Stream
-        </p>
         <h1 className="font-serif-editorial text-3xl sm:text-4xl font-semibold">
-          吉光片羽 · 日常瞬间
+          {sectionTitles?.momentsPageTitle || '吉光片羽 · 日常瞬间'}
         </h1>
-        <p className="text-sm text-[var(--text-muted)] mt-2 max-w-xl">
-          不需要长篇大论的时刻，随手记下一句话、一杯咖啡的气味、窗台新开的植物或傍晚的云。
-        </p>
+        {(sectionTitles?.momentsPageSubtitle ??
+          '不需要长篇大论的时刻，随手记下一句话、一杯咖啡的气味、窗台新开的植物或傍晚的云。') !==
+          '' && (
+          <p className="text-sm text-[var(--text-muted)] mt-2 max-w-xl">
+            {sectionTitles?.momentsPageSubtitle ??
+              '不需要长篇大论的时刻，随手记下一句话、一杯咖啡的气味、窗台新开的植物或傍晚的云。'}
+          </p>
+        )}
       </div>
 
       {/* Admin Quick Moment Composer */}

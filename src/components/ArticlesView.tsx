@@ -14,7 +14,7 @@ import {
   FileText,
   Pin,
 } from 'lucide-react';
-import type { Article } from '../types/garden';
+import type { Article, SiteSectionTitles } from '../types/garden';
 import {
   estimateReadingTime,
   extractTableOfContents,
@@ -29,6 +29,7 @@ import {
 interface ArticlesViewProps {
   articles: Article[];
   categories: string[];
+  sectionTitles?: SiteSectionTitles;
   selectedArticleId: string | null;
   isAdmin: boolean;
   onSelectArticle: (id: string | null) => void;
@@ -40,6 +41,7 @@ interface ArticlesViewProps {
 export const ArticlesView: React.FC<ArticlesViewProps> = ({
   articles,
   categories,
+  sectionTitles,
   selectedArticleId,
   isAdmin,
   onSelectArticle,
@@ -426,15 +428,16 @@ export const ArticlesView: React.FC<ArticlesViewProps> = ({
       {/* Header & Controls */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-8 border-b border-[var(--border-organic)]">
         <div>
-          <p className="text-xs uppercase tracking-widest text-[#687a56] mb-2">
-            Essays & Longform Notes
-          </p>
           <h1 className="font-serif-editorial text-3xl sm:text-4xl font-semibold">
-            林间手记 · 文章总集
+            {sectionTitles?.articlesPageTitle || '林间手记 · 文章总集'}
           </h1>
-          <p className="text-sm text-[var(--text-muted)] mt-2 max-w-xl">
-            收录远行游记、器物长测、读书笔记与四季随想。共积攒 {visibleArticles.length} 篇文字记录。
-          </p>
+          {(sectionTitles?.articlesPageSubtitle ??
+            '收录远行游记、器物长测、读书笔记与四季随想。') !== '' && (
+            <p className="text-sm text-[var(--text-muted)] mt-2 max-w-xl">
+              {sectionTitles?.articlesPageSubtitle ??
+                '收录远行游记、器物长测、读书笔记与四季随想。'}
+            </p>
+          )}
         </div>
 
         <div className="flex flex-wrap items-center gap-3">

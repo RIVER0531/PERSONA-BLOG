@@ -12,9 +12,33 @@ export interface LifeMilestone {
   description: string;
 }
 
+export interface SiteSectionTitles {
+  ownerCardBadge?: string;
+  homeArticlesTitle?: string;
+  homeMomentsTitle?: string;
+  homeTravelTitle?: string;
+  homeGalleryTitle?: string;
+  homeCollectionsTitle?: string;
+  articlesPageTitle?: string;
+  articlesPageSubtitle?: string;
+  momentsPageTitle?: string;
+  momentsPageSubtitle?: string;
+  galleryPageTitle?: string;
+  galleryPageSubtitle?: string;
+  travelPageTitle?: string;
+  travelPageSubtitle?: string;
+  travelMapCaption?: string;
+  collectionsPageTitle?: string;
+  collectionsPageSubtitle?: string;
+  timelinePageTitle?: string;
+  timelinePageSubtitle?: string;
+  contactIntro?: string;
+}
+
 export interface SiteProfile {
   gardenName: string;
   gardenSubtitle: string;
+  footerText?: string;
   ownerName: string;
   ownerTitle: string;
   avatar: string;
@@ -32,6 +56,7 @@ export interface SiteProfile {
   interests: string[];
   socialLinks: SocialLink[];
   milestones: LifeMilestone[];
+  sectionTitles?: SiteSectionTitles;
   homeModules: {
     showFeaturedArticles: boolean;
     showMoments: boolean;
