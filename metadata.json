@@ -1,0 +1,6 @@
+{
+  "name": "栖迟园 · 个人数字花园",
+  "description": "一座以自然有机风格构建的个人数字生活博客与长期记忆花园，收录文章、日常瞬间、摄影相册、旅行足迹与兴趣收藏。",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
