@@ -1,0 +1,54 @@
+{
+  "entities": {
+    "CloudStoreDocument": {
+      "title": "CloudStoreDocument",
+      "description": "Server-synchronized persistent state and media asset container for the Personal Digital Garden.",
+      "type": "object",
+      "properties": {
+        "storeType": {
+          "type": "string",
+          "description": "Type of cloud store record: state, media_index, or media_asset.",
+          "enum": ["state", "media_index", "media_asset"]
+        },
+        "payloadJson": {
+          "type": "string",
+          "description": "Serialized JSON payload or base64 binary image content.",
+          "maxLength": 950000
+        },
+        "sha256": {
+          "type": "string",
+          "description": "SHA-256 integrity hash of the payload.",
+          "maxLength": 128
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "ISO timestamp of last persistence sync.",
+          "maxLength": 64
+        }
+      },
+      "required": ["storeType", "payloadJson", "sha256", "updatedAt"]
+    },
+    "ConnectionTest": {
+      "title": "ConnectionTest",
+      "description": "Read-only connection verification document.",
+      "type": "object",
+      "properties": {
+        "ok": {
+          "type": "boolean",
+          "description": "Health status flag."
+        }
+      },
+      "required": ["ok"]
+    }
+  },
+  "firestore": {
+    "/garden_cloud_store/{storeKey}": {
+      "schema": { "$ref": "#/entities/CloudStoreDocument" },
+      "description": "Capability-keyed persistent cloud storage for garden database state and uploaded media files."
+    },
+    "/test/{docId}": {
+      "schema": { "$ref": "#/entities/ConnectionTest" },
+      "description": "Connection verification collection."
+    }
+  }
+}

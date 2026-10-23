@@ -7,6 +7,7 @@ import type {
   CollectionItem,
   SiteProfile,
 } from '../types/garden';
+import type { BackupInspectionResult } from './backupEngine';
 
 const TOKEN_STORAGE_KEY = 'qichi_garden_admin_token';
 
@@ -278,7 +279,7 @@ export async function deleteCollectionApi(id: string): Promise<void> {
 }
 
 /**
- * Compresses an image File in browser before uploading to `/api/upload` for fast loading and reliable storage.
+ * Compresses an image File in browser before uploading to `/api/upload`.
  */
 export async function compressAndUploadImage(file: File): Promise<string> {
   const dataUrl = await new Promise<string>((resolve, reject) => {
@@ -286,7 +287,7 @@ export async function compressAndUploadImage(file: File): Promise<string> {
     reader.onload = () => {
       const img = new Image();
       img.onload = () => {
-        const maxDim = 1600;
+        const maxDim = 1280;
         let { width, height } = img;
         if (width > maxDim || height > maxDim) {
           if (width > height) {
@@ -306,7 +307,7 @@ export async function compressAndUploadImage(file: File): Promise<string> {
           return;
         }
         ctx.drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL('image/jpeg', 0.86));
+        resolve(canvas.toDataURL('image/jpeg', 0.82));
       };
       img.onerror = () => resolve(reader.result as string);
       img.src = reader.result as string;
@@ -325,32 +326,125 @@ export async function compressAndUploadImage(file: File): Promise<string> {
   return data.url;
 }
 
-export async function exportGardenBackup(): Promise<void> {
-  const res = await fetch('/api/export', {
+export interface StorageDiagnosticsResponse {
+  cloud: {
+    connected: boolean;
+    projectId: string;
+    databaseId: string;
+    lastSyncedAt: string | null;
+    cloudMediaCount: number;
+  };
+  localMirror: {
+    dbFileExists: boolean;
+    localMediaCount: number;
+    localMediaFiles: string[];
+  };
+  counts: {
+    articles: number;
+    publicArticles: number;
+    privateArticles: number;
+    draftArticles: number;
+    moments: number;
+    albums: number;
+    travels: number;
+    collections: number;
+    timelineEvents: number;
+    referencedLocalMedia: number;
+  };
+  relationsSummary: {
+    totalTags: number;
+    travelLinks: number;
+    mediaReferenceCount: number;
+  };
+}
+
+export async function fetchStorageDiagnostics(): Promise<StorageDiagnosticsResponse> {
+  const res = await fetch('/api/storage/diagnostics', {
     headers: authHeaders(),
   });
-  if (!res.ok) throw new Error('导出备份失败');
+  if (!res.ok) throw new Error('获取存储架构诊断失败');
+  return res.json();
+}
+
+/**
+ * Downloads the complete ZIP backup package containing structured JSON, relations, and raw binary images.
+ */
+export async function exportFullZipBackup(): Promise<{ filename: string; sizeBytes: number }> {
+  const res = await fetch('/api/backup/export', {
+    headers: authHeaders(),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || '导出完整 ZIP 备份包失败');
+  }
   const blob = await res.blob();
+  const dateStamp = new Date().toISOString().slice(0, 10);
+  const filename = `qichi-garden-full-backup-${dateStamp}.zip`;
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  const dateStamp = new Date().toISOString().slice(0, 10);
   a.href = url;
-  a.download = `qichi-garden-backup-${dateStamp}.json`;
+  a.download = filename;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+  return { filename, sizeBytes: blob.size };
 }
 
-export async function importGardenBackup(
-  backupJson: GardenDatabase
-): Promise<GardenDatabase> {
-  const res = await fetch('/api/import', {
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(new Error('读取备份文件失败'));
+    reader.readAsDataURL(file);
+  });
+}
+
+export async function inspectZipBackupFile(
+  file: File
+): Promise<BackupInspectionResult> {
+  const zipBase64 = await fileToBase64(file);
+  const res = await fetch('/api/backup/inspect', {
     method: 'POST',
     headers: authHeaders(),
-    body: JSON.stringify(backupJson),
+    body: JSON.stringify({ zipBase64 }),
   });
   const data = await res.json();
-  if (!res.ok) throw new Error(data.error || '恢复数据失败');
-  return data.garden;
+  if (!res.ok) throw new Error(data.error || '备份包校验失败');
+  return data.inspection;
+}
+
+export interface RestoreZipResponse {
+  ok: boolean;
+  targetEnv: 'production' | 'isolated_sandbox';
+  garden?: GardenDatabase;
+  restoredMediaCount?: number;
+  inspection: BackupInspectionResult;
+  sandboxVerification?: {
+    restoredArticlesCount: number;
+    restoredMomentsCount: number;
+    restoredAlbumsCount: number;
+    restoredTravelsCount: number;
+    restoredCollectionsCount: number;
+    extractedMediaFiles: string[];
+    totalTagsRestored: number;
+    travelLinksVerified: boolean;
+    timelineEventsCount: number;
+  };
+}
+
+export async function restoreZipBackupFile(
+  file: File,
+  mode: 'replace' | 'merge',
+  targetEnv: 'production' | 'isolated_sandbox'
+): Promise<RestoreZipResponse> {
+  const zipBase64 = await fileToBase64(file);
+  const res = await fetch('/api/backup/restore', {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({ zipBase64, mode, targetEnv }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || '恢复备份失败');
+  return data;
 }

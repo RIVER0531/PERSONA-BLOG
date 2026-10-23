@@ -1,0 +1,64 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Pillar 1: Global Default-Deny Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Capability-keyed ID guard for server persistence store
+    function isValidStoreKey(key) {
+      return key is string
+        && key.size() >= 12
+        && key.size() <= 128
+        && (
+          key == 'qichi_primary_state_v1'
+          || key == 'qichi_media_index_v1'
+          || key.matches('^qichi_media_asset_[a-zA-Z0-9_\\-\\.]+$')
+        );
+    }
+
+    function isValidCloudStoreDoc(data) {
+      return data.keys().hasAll(['storeType', 'payloadJson', 'sha256', 'updatedAt'])
+        && data.keys().hasOnly(['storeType', 'payloadJson', 'sha256', 'updatedAt'])
+        && data.storeType is string
+        && (data.storeType == 'state' || data.storeType == 'media_index' || data.storeType == 'media_asset')
+        && data.payloadJson is string
+        && data.payloadJson.size() >= 2
+        && data.payloadJson.size() <= 950000
+        && data.sha256 is string
+        && data.sha256.size() >= 8
+        && data.sha256.size() <= 128
+        && data.updatedAt is string
+        && data.updatedAt.size() >= 10
+        && data.updatedAt.size() <= 64;
+    }
+
+    // Connection verification endpoint
+    match /test/{docId} {
+      allow get: if docId == 'connection';
+      allow list, create, update, delete: if false;
+    }
+
+    // Persistent cloud storage for garden database and uploaded media assets
+    match /garden_cloud_store/{storeKey} {
+      // Never allow blanket collection listing
+      allow list: if false;
+      allow get: if isValidStoreKey(storeKey);
+      allow create: if isValidStoreKey(storeKey) && isValidCloudStoreDoc(incoming());
+      allow update: if isValidStoreKey(storeKey)
+        && isValidCloudStoreDoc(incoming())
+        && incoming().storeType == existing().storeType
+        && incoming().diff(existing()).affectedKeys().hasOnly(['payloadJson', 'sha256', 'updatedAt']);
+      allow delete: if isValidStoreKey(storeKey);
+    }
+  }
+}
